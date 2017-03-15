@@ -23,15 +23,18 @@ def process_remote(request):
 
     if request.method == 'GET':
         # Get our successor
-        if request.query_params.get('request') == 'successor':
+        if request.query_params.get('request') == 'successors':
             find_address = request.data.get('ip_port')
             # If data has an ip and port, return the successor of that ip and port
+            # TODO: Finish this first one. Saving it for after testing
             if find_address:
-                correct_successor = localNode.find_successor(find_address).address
+                correct_successors = localNode.find_successor(find_address).address
             # Otherwise, return our successor
             else:
-                correct_successor = localNode.successor().address
-            return Response({'address': correct_successor})
+                correct_successors = localNode.successors()
+                return Response([{'address': node.address,
+                                  'partition_id': node.partition_id}
+                                for node in correct_successors])
 
         # Get our predecessor
         elif request.query_params.get('request') == 'predecessor':
@@ -41,7 +44,9 @@ def process_remote(request):
                 correct_predecessor = localNode.find_predecessor(find_address).address
             # Otherwise, return our predecessor
             else:
-                correct_predecessor = localNode.predecessor().address
+                correct_predecessors = localNode.predecessors()
+                return Response([{'address': node.address,
+                                  'partition_id': node.partition_id} for node in correct_predecessors])
             return Response({'address': correct_predecessor})
 
         elif request.query_params.get('request') == 'test':
@@ -115,7 +120,7 @@ def view_change(request):
 
                 # set the node's successor's predecessor to the node's predecessor
                 localNode.successor().set_predecessor(localNode.predecessor())
-                #set the node's predecessor's successor to the node's successor
+                # set the node's predecessor's successor to the node's successor
                 localNode.predecessor().set_successor(localNode.successor())
 
                 # migrate the key-values
@@ -123,7 +128,7 @@ def view_change(request):
                     key = kvs_entry.key
                     val = kvs_entry.value
 
-                    print "This is the local node's successor's address: " + localNode.successor().address;
+                    print "This is the local node's successor's address: " + localNode.successor().address
                     url_str = 'http://' + localNode.successor().address + '/kvs/' + str(key)
 
                     res = req.put(url_str, data={'val': val})

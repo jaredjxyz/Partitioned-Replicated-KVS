@@ -44,9 +44,9 @@ class Node(object):
         # store IP address
         self.address = address
         # initialize an empty successor
-        self.__successors = None
+        self.__successors = []
         # initialize an empty predecessor
-        self.__predecessors = None
+        self.__predecessors = []
 
         self.partition_id = partition_id
 
@@ -103,7 +103,7 @@ class Node(object):
             print >> sys.stderr, 'Setting successor of', socket.gethostbyname(socket.gethostname()), 'to None'
         elif self.is_local():
             print >> sys.stderr, 'Setting successor of ', socket.gethostbyname(socket.gethostname()), 'to', node.address
-            self.__successor = node
+            self.__successors.append(node)
         else:
             print >> sys.stderr, 'Setting remote successor of', self.address
             post_successor(self.address, node)
@@ -128,7 +128,7 @@ class Node(object):
             print >> sys.stderr, 'Setting predecessor of', socket.gethostbyname(socket.gethostname()), 'to None'
         elif self.is_local():
             print >> sys.stderr, 'Setting predecessor of ', socket.gethostbyname(socket.gethostname()), 'to', node.address
-            self.__predecessor = node
+            self.__predecessors.append(node)
         else:
             post_predecessor(self.address, node)
 
@@ -137,7 +137,7 @@ class Node(object):
         Sets multiple predecessors of this node
         """
         if self.is_local():
-            self.predecessors.extend(nodes)
+            self.__predecessors.extend(nodes)
         else:
             for node in nodes:
                 post_predecessor(self.address, node)
@@ -217,18 +217,20 @@ def get_successors(address):
     """
     Asks the node at a given IP for its successor, returns that node.
     """
-    res = req.get('http://' + address + '/kvs', params={'request': 'successor'})
+    res = req.get('http://' + address + '/kvs', params={'request': 'successors'})
     # res comes in as {'address': ip_port}
-    return Node(**res.json())
+    successors = eval(res.text)
+    return map(lambda x: Node(**x.json()), successors)
 
 
-def get_predecessor(address):
+def get_predecessors(address):
     """
     Asks the node at a given IP for its predecessor, returns that node.
     """
-    res = req.get('http://' + address + '/kvs', params={'request': 'predecessor'})
+    res = req.get('http://' + address + '/kvs', params={'request': 'predecessors'})
     # res comes in as {'address': ip_port}
-    return Node(**res.json())
+    predecessors = res.json()
+    return map(lambda x: Node(**x), predecessors)
 
 
 def post_successor(address, node):
