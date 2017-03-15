@@ -49,6 +49,7 @@ class Node(object):
         self.__predecessor = None
         self.partition_id = r.randint(1,50) # FIGURE THIS OUT LATER
         self.counter = Counter()
+        self.counter[self.partition_id] = 0
 
     def id(self):
         return hash(self.address) % SIZE

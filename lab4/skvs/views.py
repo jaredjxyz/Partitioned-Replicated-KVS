@@ -7,6 +7,7 @@ import sys
 from chord_operations import localNode, Node, invite_to_join, socket
 import time
 from collections import Counter
+from sys import stderr
 
 
 @api_view(['GET', 'POST'])
@@ -150,6 +151,15 @@ def view_change(request):
 
     return Response({'msg': 'Error: No IP_PORT'}, status=status.HTTP_400_BAD_REQUEST)
 
+# merge counters
+@api_view(['PUT'])
+def payload_update(request):
+    print >> stderr, "merge: " + localNode.counter.__str__()
+    a = eval(request.data['load'])
+    print >> stderr, "adding " + a.__str__()
+    localNode.counter = a | localNode.counter
+    print >> stderr, "post-merge: " + localNode.counter.__str__()
+    return Response(status=status.HTTP_200_OK)
 
 # handle incorrect keys
 @api_view(['GET', 'PUT', 'DELETE'])
@@ -219,6 +229,8 @@ def kvs_response(request, key):
 
         # create the proper url with successor's ip
         url_str = 'http://' + successor_ip + '/kvs/' + key
+        req.put('http://' + successor_ip + '/payload/', data = {'load': localNode.counter.__str__()})
+        print >> stderr, "forwarding"
 
         if method == 'GET':
             # forward request with query content
