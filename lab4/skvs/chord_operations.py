@@ -1,6 +1,8 @@
 import sys
 import requests as req
 import socket
+import random as r
+from collections import Counter
 
 # from skvs.models import KvsEntry
 # This can't be imported directly into here because of how Django works,
@@ -36,6 +38,8 @@ class Node(object):
     A class representing our instance, for reference by other nodes
     """
 
+
+
     def __init__(self, address, is_remote=True):
         # store IP address
         self.address = address
@@ -43,6 +47,8 @@ class Node(object):
         self.__successor = None
         # initialize an empty predecessor
         self.__predecessor = None
+        self.partition_id = r.randint(1,50) # FIGURE THIS OUT LATER
+        self.counter = Counter()
 
     def id(self):
         return hash(self.address) % SIZE

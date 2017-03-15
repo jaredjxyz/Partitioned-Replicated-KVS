@@ -10,6 +10,6 @@ class KvsEntry(models.Model):
 
     @classmethod
     # for entering a key, value pair
-    def create_entry(cls, key, value):
-        entry = cls(key, value)
+    def create_entry(cls, key, value, clock, time):
+        entry = cls(key, value, clock, time)
         return entry

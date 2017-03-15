@@ -5,6 +5,8 @@ from skvs.models import KvsEntry
 import requests as req
 import sys
 from chord_operations import localNode, Node, invite_to_join, socket
+import time
+from collections import Counter
 
 
 @api_view(['GET', 'POST'])
@@ -177,20 +179,24 @@ def kvs_response(request, key):
             if sys.getsizeof(input_value) > 1024 * 1024 * 256:
                 return Response({'msg': 'error', 'error': 'Size of key too big'}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
 
+            t = time.time()
+            localNode.counter[localNode.partition_id]+=1
+
+
             # If object with that key does not exist, it will be created. If it does exist, value will be updated.
-            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value})
+            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t, 'clock': localNode.counter.__str__()})
             if created:
-                return Response({'replaced': 0, 'msg': 'success', 'owner': localNode.address},
+                return Response({'replaced': 0, 'msg': 'success', 'owner': localNode.address, 'time': t, 'causal payload': localNode.counter.__str__()},
                                 status=status.HTTP_201_CREATED)
             else:
-                return Response({'replaced': 1, 'msg': 'success', 'owner': localNode.address},
+                return Response({'replaced': 1, 'msg': 'success', 'owner': localNode.address, 'time': t, 'causal payload': localNode.counter.__str__()},
                                 status=status.HTTP_200_OK)
 
         # if GET, attempt to see if key exists, return found value or resulting error.
         elif method == 'GET':
             try:
                 desired_entry = KvsEntry.objects.get(key=key)
-                return Response({'msg': 'success', 'value': desired_entry.value, 'owner': localNode.address},
+                return Response({'msg': 'success', 'value': desired_entry.value, 'owner': localNode.address, 'time': desired_entry.time, 'causal payload': desired_entry.clock},
                                 status=status.HTTP_200_OK)
             except KvsEntry.DoesNotExist:
                 expectedOwner = localNode.find_successor(key)
