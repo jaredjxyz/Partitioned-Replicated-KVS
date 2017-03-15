@@ -154,11 +154,8 @@ def view_change(request):
 # merge counters
 @api_view(['PUT'])
 def payload_update(request):
-    print >> stderr, "merge: " + localNode.counter.__str__()
     a = eval(request.data['load'])
-    print >> stderr, "adding " + a.__str__()
-    localNode.counter = a | localNode.counter
-    print >> stderr, "post-merge: " + localNode.counter.__str__()
+    localNode.counter.update(a)
     return Response(status=status.HTTP_200_OK)
 
 # handle incorrect keys
