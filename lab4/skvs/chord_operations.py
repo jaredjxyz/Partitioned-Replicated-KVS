@@ -31,6 +31,10 @@ def in_range(c, a, b):
 # ## This is initialized at Django startup (see apps.py)
 localNode = None
 
+def double_hash(x):
+    '''Hashes anything twice for better distribution of hashes'''
+    return hash(str(hash(str(x))))
+
 class Node(object):
     """
     A class representing our instance, for reference by other nodes
