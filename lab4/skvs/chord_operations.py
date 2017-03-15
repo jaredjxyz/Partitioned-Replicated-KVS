@@ -32,7 +32,7 @@ def in_range(c, a, b):
 localNode = None
 
 def double_hash(x):
-    '''Hashes anything twice for better distribution of hashes'''
+    """Hashes anything twice for better distribution of hashes"""
     return hash(str(hash(str(x))))
 
 class Node(object):
@@ -40,13 +40,15 @@ class Node(object):
     A class representing our instance, for reference by other nodes
     """
 
-    def __init__(self, address, is_remote=True):
+    def __init__(self, address, partition_id=None):
         # store IP address
         self.address = address
         # initialize an empty successor
-        self.__successor = None
+        self.__successors = None
         # initialize an empty predecessor
-        self.__predecessor = None
+        self.__predecessors = None
+
+        self.partition_id = partition_id
 
     def id(self):
         return hash(self.address) % SIZE
@@ -69,27 +71,27 @@ class Node(object):
     # ## Code for getting and setting successor and predecessor.
     # ## Use these for setting and getting, do NOT use the assignment operation on __successor or __predecessor
 
-    def successor(self):
+    def successors(self):
         """
         Returns the successor node to this node.
         If this node is a remote node, it queries the remote location and returns that location's successor.
         If this node is a local node, it just returns the known successor
         """
         if self.is_local():
-            return self.__successor
+            return self.__successors
         else:
-            return get_successor(self.address)
+            return get_successors(self.address)
 
-    def predecessor(self):
+    def predecessors(self):
         """
         Returns the predecessor node to this node.
         If this node is a remote node, it queries the remote location and returns that location's predecessor.
         If this node is a local node, it just returns the known predecessor.
         """
         if self.is_local():
-            return self.__predecessor
+            return self.__predecessors
         else:
-            return get_predecessor(self.address)
+            return get_predecessors(self.address)
 
     def set_successor(self, node):
         """
@@ -106,6 +108,16 @@ class Node(object):
             print >> sys.stderr, 'Setting remote successor of', self.address
             post_successor(self.address, node)
 
+    def set_successors(self, nodes):
+        """
+        Sets multiple successors
+        """
+        if self.is_local():
+            self.__successors.extend(nodes)
+        else:
+            for node in nodes:
+                post_successor(self.address, node)
+
     def set_predecessor(self, node):
         """
         Sets the successor node of this node, given and address
@@ -119,6 +131,17 @@ class Node(object):
             self.__predecessor = node
         else:
             post_predecessor(self.address, node)
+
+    def set_predecessors(self, nodes):
+        """
+        Sets multiple predecessors of this node
+        """
+        if self.is_local():
+            self.predecessors.extend(nodes)
+        else:
+            for node in nodes:
+                post_predecessor(self.address, node)
+
 
     # ######## Code for finding successor node of an identifier ######## #
 
@@ -190,7 +213,7 @@ class Node(object):
 
 
 # Communication functions
-def get_successor(address):
+def get_successors(address):
     """
     Asks the node at a given IP for its successor, returns that node.
     """
@@ -214,7 +237,8 @@ def post_successor(address, node):
     """
     req.post('http://' + address + '/kvs',
              params={'request': 'successor'},
-             data={'ip_port': node.address})
+             data={'ip_port': node.address,
+                   'partition_id': node.partition_id})
 
 
 def post_predecessor(address, node):
@@ -223,7 +247,8 @@ def post_predecessor(address, node):
     """
     req.post('http://' + address + '/kvs',
              params={'request': 'predecessor'},
-             data={'ip_port': node.address})
+             data={'ip_port': node.address,
+                   'partition_id': node.partition_id})
 
 
 def invite_to_join(address):

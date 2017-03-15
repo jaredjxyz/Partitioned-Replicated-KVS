@@ -57,5 +57,5 @@ class SkvsConfig(AppConfig):
                     if chord_operations.in_range(double_hash(partition_number), double_hash(predecessor_partition_number), chord_operations.double_hash(partition_number)):
                         predecessor_partition_number = partition_number
 
-                chord_operations.localNode.set_successors(map(lambda x: Node(x), partitions[successor_partition_number]))
-                chord_operations.localNode.set_predecessors(map(lambda x: Node(x)), partitions[predecessor_partition_number])
+                chord_operations.localNode.set_successors(map(lambda x: Node(x, my_partition_number), partitions[successor_partition_number]))
+                chord_operations.localNode.set_predecessors(map(lambda x: Node(x, my_partition_number)), partitions[predecessor_partition_number])
