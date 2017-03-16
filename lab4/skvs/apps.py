@@ -37,14 +37,15 @@ class SkvsConfig(AppConfig):
                 # Create empty buckets for each partition and fill them up
                 partitions = [[] for i in range(num_partitions)]
                 partition_number = 0
+                print >> sys.stderr, len(partitions)
                 for address in sorted(addresses):
                     partitions[partition_number].append(address)
 
                     # If we find our address, we know our partition number
                     if address == myIP:
-                        my_partition_number = i
+                        my_partition_number = partition_number
 
-                    if len(partitions[i]) == partition_size:
+                    if len(partitions[partition_number]) == partition_size:
                         partition_number += 1
 
                 # Randomize the order so that one node doesn't get used more than another
