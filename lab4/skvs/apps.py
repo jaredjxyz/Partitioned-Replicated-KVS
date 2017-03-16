@@ -39,6 +39,7 @@ class SkvsConfig(AppConfig):
                 # Create empty buckets for each partition and fill them up
                 partitions = [[] for i in range(num_partitions)]
                 partition_number = 0
+
                 for address in sorted(addresses):
                     partitions[partition_number].append(address)
 
@@ -46,6 +47,7 @@ class SkvsConfig(AppConfig):
                     if address == myIP:
                         my_partition_number = partition_number
 
+                    # If the current partition is full, increment the partition_number
                     if len(partitions[partition_number]) == partition_size:
                         partition_number += 1
 
