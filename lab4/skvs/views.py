@@ -37,7 +37,7 @@ def process_remote(request):
                                 for node in correct_successors])
 
         # Get our predecessor
-        elif request.query_params.get('request') == 'predecessor':
+        elif request.query_params.get('request') == 'predecessors':
             find_address = request.data.get('ip_port')
             # If data has an ip and port, return the predecessor of that ip and port
             if find_address:
@@ -51,9 +51,15 @@ def process_remote(request):
 
         elif request.query_params.get('request') == 'test':
             # set my successor's predecessor to be my predecessor (which then looks forever when getting predecessors)
-            localNode.successor().set_predecessor(localNode.predecessor())
+            predecessors = localNode.predecessors()
+            for predecessor in predecessors:
+                predecessors2 = predecessor.predecessors()
+                for predecessor2 in predecessors2:
+                    predecessor2.set_predecessor(predecessor2)
+
+
             # Returns my predecessor in a 2-node network now, though before we set the predecessor it returned me.
-            return Response(localNode.predecessor().predecessor().predecessor().predecessor().address)
+            return Response({'msg': 'success'})
 
     elif request.method == 'POST':
         # Change our successor

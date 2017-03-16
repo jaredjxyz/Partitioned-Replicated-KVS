@@ -218,9 +218,9 @@ def get_successors(address):
     Asks the node at a given IP for its successor, returns that node.
     """
     res = req.get('http://' + address + '/kvs', params={'request': 'successors'})
-    # res comes in as {'address': ip_port}
-    successors = eval(res.text)
-    return map(lambda x: Node(**x.json()), successors)
+    # Res comes in as a list of dicts
+    successors = res.json()
+    return map(lambda x: Node(**x), successors)
 
 
 def get_predecessors(address):
@@ -228,7 +228,7 @@ def get_predecessors(address):
     Asks the node at a given IP for its predecessor, returns that node.
     """
     res = req.get('http://' + address + '/kvs', params={'request': 'predecessors'})
-    # res comes in as {'address': ip_port}
+    # Predecessors come in as a list of dicts
     predecessors = res.json()
     return map(lambda x: Node(**x), predecessors)
 
