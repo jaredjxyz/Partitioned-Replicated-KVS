@@ -10,10 +10,12 @@ import socket
 # http://pdos.csail.mit.edu/papers/chord:sigcomm01/chord_sigcomm.pdf
 
 
-SIZE = 2**31-1
+SIZE = 2**31 - 1
 
 # borrowed, slightly optimized helper function from
 # https://github.com/gaston770/python-chord/blob/master/address.py
+
+
 def in_range(c, a, b):
     """
     Is c in [a,b)?, if a == b then it assumes a full circle on the DHT,
@@ -31,25 +33,35 @@ def in_range(c, a, b):
 # ## This is initialized at Django startup (see apps.py)
 localNode = None
 
+
+def double_hash(x):
+    """Hashes anything twice for better distribution of hashes"""
+    return hash(str(hash(str(x))))
+
+
 class Node(object):
     """
     A class representing our instance, for reference by other nodes
     """
 
-    def __init__(self, address, is_remote=True):
+    def __init__(self, address, partition_id=None):
         # store IP address
         self.address = address
         # initialize an empty successor
-        self.__successor = None
+        self.__successors = []
         # initialize an empty predecessor
-        self.__predecessor = None
+        self.__predecessors = []
+        # initialize empty partition members
+        self.__partition_members = []
+
+        self.partition_id = partition_id
 
     def id(self):
-        return hash(self.address) % SIZE
+        return double_hash(self.partition_id) % SIZE
 
     # determine if this key is stored on our node
     def is_mine(self, key):
-        key_location = hash(key) % SIZE
+        key_location = double_hash(key) % SIZE
         return in_range(key_location, self.predecessor().id(), self.id())
 
     # query successor's ip so we can forward request
@@ -65,27 +77,36 @@ class Node(object):
     # ## Code for getting and setting successor and predecessor.
     # ## Use these for setting and getting, do NOT use the assignment operation on __successor or __predecessor
 
-    def successor(self):
+    def successors(self):
         """
         Returns the successor node to this node.
         If this node is a remote node, it queries the remote location and returns that location's successor.
         If this node is a local node, it just returns the known successor
         """
         if self.is_local():
-            return self.__successor
+            return self.__successors
         else:
-            return get_successor(self.address)
+            return get_successors(self.address)
 
-    def predecessor(self):
+    def predecessors(self):
         """
         Returns the predecessor node to this node.
         If this node is a remote node, it queries the remote location and returns that location's predecessor.
         If this node is a local node, it just returns the known predecessor.
         """
         if self.is_local():
-            return self.__predecessor
+            return self.__predecessors
         else:
-            return get_predecessor(self.address)
+            return get_predecessors(self.address)
+
+    def partition_members(self):
+        """
+        Returns a list of all members of this partition, including self
+        """
+        if self.is_local():
+            return self.__partition_members
+        else:
+            return get_partition_members(self.address)
 
     def set_successor(self, node):
         """
@@ -93,14 +114,24 @@ class Node(object):
         If this node is a remote node it queries the remote location and tells it to set its successor
         If this node is a local node, it just sets the local successor.
         """
-        if node == None:
+        if node is None:
             print >> sys.stderr, 'Setting successor of', socket.gethostbyname(socket.gethostname()), 'to None'
         elif self.is_local():
             print >> sys.stderr, 'Setting successor of ', socket.gethostbyname(socket.gethostname()), 'to', node.address
-            self.__successor = node
+            self.__successors.append(node)
         else:
             print >> sys.stderr, 'Setting remote successor of', self.address
             post_successor(self.address, node)
+
+    def set_successors(self, nodes):
+        """
+        Sets multiple successors
+        """
+        if self.is_local():
+            self.__successors.extend(nodes)
+        else:
+            for node in nodes:
+                post_successor(self.address, node)
 
     def set_predecessor(self, node):
         """
@@ -108,13 +139,77 @@ class Node(object):
         If this node is a remote node it queries the remote location and tells it to set its successor
         If this node is a local node, it just sets the local successor.
         """
-        if node == None:
+        if node is None:
             print >> sys.stderr, 'Setting predecessor of', socket.gethostbyname(socket.gethostname()), 'to None'
         elif self.is_local():
             print >> sys.stderr, 'Setting predecessor of ', socket.gethostbyname(socket.gethostname()), 'to', node.address
-            self.__predecessor = node
+            self.__predecessors.append(node)
         else:
             post_predecessor(self.address, node)
+
+    def set_predecessors(self, nodes):
+        """
+        Sets multiple predecessors of this node
+        """
+        if self.is_local():
+            self.__predecessors.extend(nodes)
+        else:
+            for node in nodes:
+                post_predecessor(self.address, node)
+
+    def set_partition_member(self, node):
+        """
+        Adds a partition member to this node
+        """
+        if self.is_local():
+            self.__partition_members.append(node)
+        else:
+            post_partition_member(self.address, node)
+
+    def set_partition_members(self, nodes):
+        """
+        Adds multiple partition members to this node
+        """
+        if self.is_local():
+            self.__partition_members.extend(nodes)
+        else:
+            for node in nodes:
+                post_partition_member(self.address, node)
+
+    def remove_successor(self, node):
+        """
+        Removes successor from this node
+        """
+        if self.is_local():
+            for successor_node in self.__successors:
+                print >> sys.stderr, "DAJFAJA"
+                if node.address == successor_node.address:
+                    print >> sys.stderr, "EVDSAKFFGKAS"
+                    self.__successors.remove(successor_node)
+        else:
+            delete_successor(self.address, node)
+
+    def remove_predecessor(self, node):
+        """
+        Removes predecessor from this node
+        """
+        if self.is_local():
+            for predecessor_node in self.__predecessors:
+                if node.address == predecessor_node.address:
+                    self.__predecessors.remove(predecessor_node)
+        else:
+            delete_predecessor(self.address, node)
+
+    def remove_partition_member(self, node):
+        """
+        Removes partition member from this node
+        """
+        if self.is_local():
+            for partition_member in self.__partition_members:
+                if node.address == partition_member.address:
+                    self.__partition_members.remove(partition_member)
+        else:
+            delete_partition_member(self.address, node)
 
     # ######## Code for finding successor node of an identifier ######## #
 
@@ -152,17 +247,6 @@ class Node(object):
         # Our successor has some of our keys. Tell it to give them to us
         self.successor().notify(self)
 
-    # update to notify successor of new node about its predecessor
-    # NOTE: Not needed in linear hashing. Implement this once we get to chord.
-    # def stabilize(self):
-    #     x = self.successor().predecessor()
-    #     # if a predecessor exists, lies between us and our successor, and we are not the only node in the ring
-    #     if x is not None and in_range(x.id(), self.id(), self.successor().id()) and self.id() != self.successor().id():
-    #         # we can say our successor is our successor's predecessor
-    #         self.set_successor(x)
-    #     # We notify our new successor about us
-    #     self.successor().notify(self)
-
     # new_node may be our predecessor
     def notify(self, new_node):
         """
@@ -184,24 +268,42 @@ class Node(object):
         """
         sendKVSEntry(node.address, key, value)
 
+    def __repr__(self):
+        """
+        Returns a string-representation of self for printing
+        """
+        return Node.__name__ + '(' + 'address=' + repr(self.address) + ', partition_id=' + repr(self.partition_id) + ')'
+
 
 # Communication functions
-def get_successor(address):
+def get_successors(address):
     """
     Asks the node at a given IP for its successor, returns that node.
     """
-    res = req.get('http://' + address + '/kvs', params={'request': 'successor'})
-    # res comes in as {'address': ip_port}
-    return Node(**res.json())
+    res = req.get('http://' + address + '/kvs', params={'request': 'successors'})
+    # Res comes in as a list of dicts
+    successors = res.json()
+    return map(lambda params: Node(**params), successors)
 
 
-def get_predecessor(address):
+def get_predecessors(address):
     """
     Asks the node at a given IP for its predecessor, returns that node.
     """
-    res = req.get('http://' + address + '/kvs', params={'request': 'predecessor'})
-    # res comes in as {'address': ip_port}
-    return Node(**res.json())
+    res = req.get('http://' + address + '/kvs', params={'request': 'predecessors'})
+    # Predecessors come in as a list of dicts
+    predecessors = res.json()
+    return map(lambda params: Node(**params), predecessors)
+
+
+def get_partition_members(address):
+    """
+    Asks the node at a given IP for its partition members
+    """
+    res = req.get('http://' + address + '/kvs', params={'request': 'partition_members'})
+    # Partition members come in as a list of dicts
+    partition_members = res.json()
+    return map(lambda params: Node(**params), partition_members)
 
 
 def post_successor(address, node):
@@ -210,7 +312,8 @@ def post_successor(address, node):
     """
     req.post('http://' + address + '/kvs',
              params={'request': 'successor'},
-             data={'ip_port': node.address})
+             data={'ip_port': node.address,
+                   'partition_id': node.partition_id})
 
 
 def post_predecessor(address, node):
@@ -219,7 +322,45 @@ def post_predecessor(address, node):
     """
     req.post('http://' + address + '/kvs',
              params={'request': 'predecessor'},
-             data={'ip_port': node.address})
+             data={'ip_port': node.address,
+                   'partition_id': node.partition_id})
+
+
+def post_partition_member(address, node):
+    """
+    Tells address to add node to its partition members
+    """
+    req.post('http://' + address + '/kvs',
+             params={'request': 'partition_member'},
+             data={'ip_port': node.address,
+                   'partition_id': node.partition_id})
+
+
+def delete_successor(address, node):
+    """
+    Tells address to remove node from its successors
+    """
+    req.delete('http://' + address + '/kvs',
+               params={'request': 'successor'},
+               data={'ip_port': node.address})
+
+
+def delete_predecessor(address, node):
+    """
+    Tells address to remove node from its predecessors
+    """
+    req.delete('http://' + address + '/kvs',
+               params={'request': 'predecessor'},
+               data={'ip_port': node.address})
+
+
+def delete_partition_member(address, node):
+    """
+    Tells address to remove node from its partition members
+    """
+    req.delete('http://' + address + '/kvs',
+               params={'request': 'partition_member'},
+               data={'ip_port': node.address})
 
 
 def invite_to_join(address):
