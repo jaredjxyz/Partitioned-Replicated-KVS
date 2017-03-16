@@ -1,12 +1,8 @@
 import sys
 import requests as req
-import socket
-<<<<<<< HEAD
-import random as r
 from collections import Counter
-=======
 import random
->>>>>>> master
+from requests.exceptions import ConnectionError
 
 # from skvs.models import KvsEntry
 # This can't be imported directly into here because of how Django works,
@@ -14,8 +10,6 @@ import random
 
 # Code contained herein based upon pseudocode from the Chord paper:
 # http://pdos.csail.mit.edu/papers/chord:sigcomm01/chord_sigcomm.pdf
-
-
 
 SIZE = 2**31 - 1
 
@@ -51,7 +45,6 @@ class Node(object):
     A class representing our instance, for reference by other nodes
     """
 
-
     def __init__(self, address, partition_id=None):
         # store IP address
         self.address = address
@@ -65,6 +58,8 @@ class Node(object):
         # initialize empty partition members
         self.__partition_members = []
         self.partition_id = partition_id
+
+        self.ready = None
 
     def id(self):
         return double_hash(self.partition_id) % SIZE
@@ -394,3 +389,20 @@ def notify(address, node):
     req.post('http://' + address + '/kvs',
              params={'request': 'notify'},
              data={'ip_port': node.address})
+
+
+def ask_ready(address):
+    """
+    Asks address if it's ready
+    """
+    try:
+        res = req.get('http://' + address + '/kvs',
+                      params={'request': 'ready'})
+
+    except ConnectionError:
+        print 'Hi'
+        return None
+
+    print >> sys.stderr, res.json()['msg']
+
+    return res.json()['msg']
