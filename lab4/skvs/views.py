@@ -89,6 +89,8 @@ def process_remote(request):
             return Response([{'address': node.address,
                               'partition_id': node.partition_id} for node in partition_members])
 
+        elif request.query_params.get('request') == 'ready':
+            return Response({'msg': localNode.ready})
         # Use this for any arbitrary test you may want to run
         elif request.query_params.get('request') == 'test':
             node = localNode.partition_members()[1]

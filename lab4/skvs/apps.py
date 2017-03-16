@@ -6,7 +6,9 @@ import os
 import math
 import random
 import sys
+from time import sleep
 from chord_operations import double_hash, Node
+from threading import Thread
 
 
 class SkvsConfig(AppConfig):
@@ -75,4 +77,16 @@ class SkvsConfig(AppConfig):
                 chord_operations.localNode.set_successors(map(lambda x: Node(x, successor_partition_number), partitions[successor_partition_number]))
                 chord_operations.localNode.set_predecessors(map(lambda x: Node(x, predecessor_partition_number), partitions[predecessor_partition_number]))
                 chord_operations.localNode.set_partition_members(map(lambda x: Node(x, my_partition_number), partitions[my_partition_number]))
-                print >> sys.stderr, chord_operations.localNode.successors()
+
+                chord_operations.localNode.ready = False
+                readyThread = Thread(target=getReady, args=[addresses])
+                readyThread.start()
+
+
+def getReady(addresses):
+    while True:
+        sleep(1)
+        readyAddresses = [chord_operations.ask_ready(address) is not None for address in addresses]
+        if all(readyAddresses):
+            chord_operations.localNode.ready = True
+            return
