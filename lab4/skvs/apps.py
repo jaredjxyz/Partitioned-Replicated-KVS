@@ -47,7 +47,7 @@ class SkvsConfig(AppConfig):
                     if address == myIP:
                         my_partition_number = partition_number
 
-                    # If the current partition is full, increment the partition_number
+                     # If the current partition is full, increment the partition_number
                     if len(partitions[partition_number]) == partition_size:
                         partition_number += 1
 
