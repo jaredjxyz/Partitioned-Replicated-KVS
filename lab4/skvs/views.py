@@ -20,11 +20,18 @@ def gossip(request):
         partner_vc = eval(req.get(url_str).json()['causal payload'])
         # if our vector clocks are not equal
         if not eval(entry.clock)[localNode.partition_id] == partner_vc[localNode.partition_id]:
-            # take pair-wise max
+            temp = localNode.counter
             localNode.counter = localNode.counter | partner_vc
-            # update key
-            
-        # if vector clocks are equal, but the stored values are different, tiebreak
+            # update our key if it is the stale one
+            if partner_vc[localNode.partition_id] > temp[localNode.partition_id]:
+                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'], 'time': req.get(url_str).json()['time'], 'clock': repr(localNode.counter | partner_vc)})
+            # tiebreaker based on server id + timestamp
+            elif :
+
+            else:
+                pass
+                # partner has stale value, TODO update it directly without modifying the vector clock
+        # if vector clocks are equal, but the stored times are different, tiebreak
         if eval(entry.clock)[localNode.partition_id] == partner_vc[localNode.partition_id] and not entry.time == req.get(url_str).json()['time']:
             # if we are the stale value, update our key to partner's key
             if entry.time < req.get(url_str).json()['time']:
