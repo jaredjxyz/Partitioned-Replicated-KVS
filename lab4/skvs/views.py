@@ -11,6 +11,17 @@ from sys import stderr
 
 
 @api_view(['GET', 'POST', 'DELETE'])
+def gossip(request):
+    partner_ip_port = request.data.get('ip_port')
+    # compare all my keys to my partner's keys
+    for key in KvsEntry.objects.all():
+        url_str = 'http://' + partner_ip_port + '/kvs/' + key
+        # get same key from partner
+        res = req.get(url_str)
+        # TODO compare vector clocks once we have it as a json field in returned data
+        # TODO issue replace outdated key, if the vector clocks do not match
+
+@api_view(['GET', 'POST', 'DELETE'])
 def process_remote(request):
     """
     Handles miscellaneous remote communication.
@@ -73,7 +84,6 @@ def process_remote(request):
         # Add a successor
         if request.query_params.get('request') == 'successor':
             successor_ip = request.data.get('ip_port')
-            print >> sys.stderr, "Successor being called", socket.gethostbyname(socket.gethostname())
             if successor_ip:
 
                 localNode.set_successor(Node(successor_ip))
@@ -170,7 +180,6 @@ def view_change(request):
                     key = kvs_entry.key
                     val = kvs_entry.value
 
-                    print "This is the local node's successor's address: " + localNode.successor().address
                     url_str = 'http://' + localNode.successor().address + '/kvs/' + str(key)
 
                     res = req.put(url_str, data={'val': val})
