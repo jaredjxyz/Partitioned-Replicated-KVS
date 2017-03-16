@@ -63,7 +63,6 @@ def process_remote(request):
             print >> sys.stderr, node.partition_members()
             node.remove_partition_member(Node('10.0.0.0'))
             print >> sys.stderr, 'Removed', node.partition_members()
-
             return Response({'msg': 'success'})
 
     elif request.method == 'POST':
