@@ -155,7 +155,10 @@ def view_change(request):
 @api_view(['PUT'])
 def payload_update(request):
     a = eval(request.data['load'])
-    localNode.counter.update(a)
+    print >> stderr, "counter should before: " + repr(localNode.counter)
+    print >> stderr, "payload is: " + repr(a)
+    localNode.counter = localNode.counter | a
+    print >> stderr, "counter should goes to " + repr(localNode.counter)
     return Response(status=status.HTTP_200_OK)
 
 # handle incorrect keys
@@ -226,8 +229,7 @@ def kvs_response(request, key):
 
         # create the proper url with successor's ip
         url_str = 'http://' + successor_ip + '/kvs/' + key
-        req.put('http://' + successor_ip + '/payload/', data = {'load': localNode.counter.__str__()})
-        print >> stderr, "forwarding"
+        req.put('http://' + successor_ip + '/payload/', data = {'load': repr(localNode.counter)})
 
         if method == 'GET':
             # forward request with query content

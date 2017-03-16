@@ -12,7 +12,10 @@ from collections import Counter
 # http://pdos.csail.mit.edu/papers/chord:sigcomm01/chord_sigcomm.pdf
 
 
-SIZE = 2**31-1
+SIZE = 2**9-1
+
+def double_hash(x):
+    return hash(str(hash(str(x))))
 
 # borrowed, slightly optimized helper function from
 # https://github.com/gaston770/python-chord/blob/master/address.py
@@ -49,14 +52,14 @@ class Node(object):
         self.__predecessor = None
         self.partition_id = r.randint(1,50) # FIGURE THIS OUT LATER
         self.counter = Counter()
-        self.counter[self.partition_id] = 0
+        # self.counter[self.partition_id] = 0
 
     def id(self):
         return hash(self.address) % SIZE
 
     # determine if this key is stored on our node
     def is_mine(self, key):
-        key_location = hash(key) % SIZE
+        key_location = double_hash(key) % SIZE
         return in_range(key_location, self.predecessor().id(), self.id())
 
     # query successor's ip so we can forward request
