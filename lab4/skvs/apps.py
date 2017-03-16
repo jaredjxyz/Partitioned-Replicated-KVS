@@ -77,7 +77,6 @@ class SkvsConfig(AppConfig):
                 chord_operations.localNode.set_successors(map(lambda x: Node(x, successor_partition_number), partitions[successor_partition_number]))
                 chord_operations.localNode.set_predecessors(map(lambda x: Node(x, predecessor_partition_number), partitions[predecessor_partition_number]))
                 chord_operations.localNode.set_partition_members(map(lambda x: Node(x, my_partition_number), partitions[my_partition_number]))
-                print >> sys.stderr, chord_operations.localNode.successors()
 
                 chord_operations.localNode.ready = False
                 readyThread = Thread(target=getReady, args=[addresses])
@@ -91,4 +90,3 @@ def getReady(addresses):
         if all(readyAddresses):
             chord_operations.localNode.ready = True
             return
-

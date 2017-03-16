@@ -400,9 +400,6 @@ def ask_ready(address):
                       params={'request': 'ready'})
 
     except ConnectionError:
-        print 'Hi'
         return None
-
-    print >> sys.stderr, res.json()['msg']
 
     return res.json()['msg']
