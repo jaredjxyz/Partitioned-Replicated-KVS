@@ -14,12 +14,25 @@ from sys import stderr
 def gossip(request):
     partner_ip_port = request.data.get('ip_port')
     # compare all my keys to my partner's keys
-    for key in KvsEntry.objects.all():
-        url_str = 'http://' + partner_ip_port + '/kvs/' + key
+    for entry in KvsEntry.objects.all():
+        url_str = 'http://' + partner_ip_port + '/kvs/' + entry.key
         # get same key from partner
-        res = req.get(url_str)
-        # TODO compare vector clocks once we have it as a json field in returned data
-        # TODO issue replace outdated key, if the vector clocks do not match
+        partner_vc = eval(req.get(url_str).json()['causal payload'])
+        # if our vector clocks are not equal
+        if not eval(entry.clock)[localNode.partition_id] == partner_vc[localNode.partition_id]:
+            # take pair-wise max
+            localNode.counter = localNode.counter | partner_vc
+            # update key
+            
+        # if vector clocks are equal, but the stored values are different, tiebreak
+        if eval(entry.clock)[localNode.partition_id] == partner_vc[localNode.partition_id] and not entry.time == req.get(url_str).json()['time']:
+            # if we are the stale value, update our key to partner's key
+            if entry.time < req.get(url_str).json()['time']:
+                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'], 'time': req.get(url_str).json()['time'], 'clock': repr(localNode.counter | partner_vc)})
+            else:
+                pass
+                # partner has stale value, TODO update it directly without modifying the vector clock
+
 
 @api_view(['GET', 'POST', 'DELETE'])
 def process_remote(request):
@@ -253,7 +266,7 @@ def kvs_response(request, key):
                         if eval(cheq.json()['causal payload'])[localNode.partition_id] > localNode.counter[localNode.partition_id]:
                             localNode.counter = localNode.counter | eval(cheq.json()['causal payload'])
                             latest = KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json()'time'], 'clock': cheq.json()['causal payload']})
-                except KeyError:
+                except Exception:
                     pass
 
             # If object with that key does not exist, it will be created. If it does exist, value will be updated.
