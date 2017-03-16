@@ -12,14 +12,8 @@ from collections import Counter
 # http://pdos.csail.mit.edu/papers/chord:sigcomm01/chord_sigcomm.pdf
 
 
-<<<<<<< HEAD
-SIZE = 2**9-1
 
-def double_hash(x):
-    return hash(str(hash(str(x))))
-=======
 SIZE = 2**31 - 1
->>>>>>> origin/initialSetup
 
 # borrowed, slightly optimized helper function from
 # https://github.com/gaston770/python-chord/blob/master/address.py
@@ -53,30 +47,20 @@ class Node(object):
     A class representing our instance, for reference by other nodes
     """
 
-<<<<<<< HEAD
 
-
-    def __init__(self, address, is_remote=True):
-=======
     def __init__(self, address, partition_id=None):
->>>>>>> origin/initialSetup
         # store IP address
         self.address = address
         # initialize an empty successor
         self.__successors = []
         # initialize an empty predecessor
-<<<<<<< HEAD
-        self.__predecessor = None
-        self.partition_id = r.randint(1,50) # FIGURE THIS OUT LATER
+
         self.counter = Counter()
         # self.counter[self.partition_id] = 0
-=======
         self.__predecessors = []
         # initialize empty partition members
         self.__partition_members = []
-
         self.partition_id = partition_id
->>>>>>> origin/initialSetup
 
     def id(self):
         return double_hash(self.partition_id) % SIZE

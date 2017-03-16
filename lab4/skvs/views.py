@@ -198,11 +198,7 @@ def view_change(request):
 # merge counters
 @api_view(['PUT'])
 def payload_update(request):
-    a = eval(request.data['load'])
-    print >> stderr, "counter should before: " + repr(localNode.counter)
-    print >> stderr, "payload is: " + repr(a)
-    localNode.counter = localNode.counter | a
-    print >> stderr, "counter should goes to " + repr(localNode.counter)
+    localNode.counter = localNode.counter | eval(request.data['load'])
     return Response(status=status.HTTP_200_OK)
 
 # handle incorrect keys
@@ -236,6 +232,20 @@ def kvs_response(request, key):
             t = time.time()
             localNode.counter[localNode.partition_id]+=1
 
+            try:
+                desired_entry = KvsEntry.objects.get(key=key)
+            except KvsEntry.DoesNotExist:
+                pass
+
+            for node in localNode.__partition_members[]:
+                try:
+                    cheq = req.get('http://'+node.address+ '/kvs/' + key)
+                    if 'causal payload' in cheq.json():
+                        if eval(cheq.json()['causal payload'])[localNode.partition_id] > localNode.counter[localNode.partition_id]:
+                            localNode.counter = localNode.counter | eval(cheq.json()['causal payload'])
+                            latest = KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json()'time'], 'clock': cheq.json()['causal payload']})
+                except KeyError:
+                    pass
 
             # If object with that key does not exist, it will be created. If it does exist, value will be updated.
             obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t, 'clock': localNode.counter.__str__()})
@@ -248,6 +258,19 @@ def kvs_response(request, key):
 
         # if GET, attempt to see if key exists, return found value or resulting error.
         elif method == 'GET':
+
+            for node in localNode.__partition_members[]:
+                try:
+                    cheq = req.get('http://'+ node.address + '/kvs/' + key)
+                    try:
+                        if eval(cheq.json()['causal payload'])[localNode.partition_id] > localNode.counter[localNode.partition_id]:
+                            localNode.counter = localNode.counter | eval(eval(cheq.content)['causal payload'])
+                            latest = KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json()['time'], 'clock': cheq.json()['causal payload']})
+                    except (AttributeError, KeyError):
+                        pass
+                except ConnectionError:
+                    pass
+
             try:
                 desired_entry = KvsEntry.objects.get(key=key)
                 return Response({'msg': 'success', 'value': desired_entry.value, 'owner': localNode.address, 'time': desired_entry.time, 'causal payload': desired_entry.clock},
@@ -257,13 +280,13 @@ def kvs_response(request, key):
                 return Response({'msg': 'error', 'error': 'key does not exist', 'owner': expectedOwner.address}, status=status.HTTP_404_NOT_FOUND)
 
         # check if key exists, delete if so, otherwise return error message
-        elif method == 'DELETE':
-            try:
-                KvsEntry.objects.get(key=key).delete()
-                return Response({'msg': 'success', 'owner': localNode.address}, status=status.HTTP_200_OK)
-            except KvsEntry.DoesNotExist:
-                expectedOwner = localNode.find_successor(key)
-                return Response({'msg': 'error', 'error': 'key does not exist', 'owner': expectedOwner.address}, status=status.HTTP_404_NOT_FOUND)
+        # elif method == 'DELETE':
+        #     try:
+        #         KvsEntry.objects.get(key=key).delete()
+        #         return Response({'msg': 'success', 'owner': localNode.address}, status=status.HTTP_200_OK)
+        #     except KvsEntry.DoesNotExist:
+        #         expectedOwner = localNode.find_successor(key)
+        #         return Response({'msg': 'error', 'error': 'key does not exist', 'owner': expectedOwner.address}, status=status.HTTP_404_NOT_FOUND)
 
     # if it was not ours, we must forward the query to our successor
     else:
@@ -283,9 +306,9 @@ def kvs_response(request, key):
             # forward to main whether or not the request is empty
             res = req.put(url_str, data=request.data)
 
-        elif method == 'DELETE':
-            # forward request as delete operation
-            # check if item exists, delete if so:
-            res = req.delete(url_str)
+        # elif method == 'DELETE':
+        #     # forward request as delete operation
+        #     # check if item exists, delete if so:
+        #     res = req.delete(url_str)
 
         return Response(res.json(), status=res.status_code)
