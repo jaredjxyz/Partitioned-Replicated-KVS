@@ -1,6 +1,7 @@
 import sys
 import requests as req
 import socket
+import random
 
 # from skvs.models import KvsEntry
 # This can't be imported directly into here because of how Django works,
@@ -73,6 +74,14 @@ class Node(object):
 
     def is_remote(self):
         return self != localNode
+
+    # ## Run gossip in background randomly within an alright range of time
+    def run_gossip(self):
+        # TODO set up so gossip runs every few seconds as a thread. Move wait_time to be a fixed attribute elsewhere
+        # each node has a fixed amount of time it waits before issues gossip request to its partition members
+        wait_time = random.randint(5, len(self.__partition_members))
+        partner_node = random.choice(self.__partition_members)
+        req.put('http://' + partner_node + '/kvs/gossip', params={'request': 'gossip'}, data={'ip_port': self.address})
 
     # ## Code for getting and setting successor and predecessor.
     # ## Use these for setting and getting, do NOT use the assignment operation on __successor or __predecessor
