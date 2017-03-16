@@ -1,6 +1,7 @@
 import sys
 import requests as req
 import socket
+from requests.exceptions import ConnectionError
 
 # from skvs.models import KvsEntry
 # This can't be imported directly into here because of how Django works,
@@ -55,6 +56,8 @@ class Node(object):
         self.__partition_members = []
 
         self.partition_id = partition_id
+
+        self.ready = None
 
     def id(self):
         return double_hash(self.partition_id) % SIZE
@@ -376,3 +379,19 @@ def notify(address, node):
     req.post('http://' + address + '/kvs',
              params={'request': 'notify'},
              data={'ip_port': node.address})
+
+def ask_ready(address):
+    """
+    Asks address if it's ready
+    """
+    try:
+        res = req.get('http://' + address + '/kvs',
+                      params={'request': 'ready'})
+
+    except ConnectionError:
+        print 'Hi'
+        return None
+
+    print >> sys.stderr, res.json()['msg']
+
+    return res.json()['msg']
