@@ -7,7 +7,7 @@ import sys
 from chord_operations import localNode, Node, invite_to_join, socket
 
 
-@api_view(['GET', 'POST'])
+@api_view(['GET', 'POST', 'DELETE'])
 def process_remote(request):
     """
     Handles miscellaneous remote communication.
@@ -22,7 +22,7 @@ def process_remote(request):
     """
 
     if request.method == 'GET':
-        # Get our successor
+        # Get our successors
         if request.query_params.get('request') == 'successors':
             find_address = request.data.get('ip_port')
             # If data has an ip and port, return the successor of that ip and port
@@ -36,7 +36,7 @@ def process_remote(request):
                                   'partition_id': node.partition_id}
                                 for node in correct_successors])
 
-        # Get our predecessor
+        # Get our predecessors
         elif request.query_params.get('request') == 'predecessors':
             find_address = request.data.get('ip_port')
             # If data has an ip and port, return the predecessor of that ip and port
@@ -49,20 +49,25 @@ def process_remote(request):
                                   'partition_id': node.partition_id} for node in correct_predecessors])
             return Response({'address': correct_predecessor})
 
+        # Get our partition members
+        elif request.query_params.get('request') == 'partition_members':
+            partition_members = localNode.partition_members()
+            return Response([{'address': node.address,
+                              'partition_id': node.partition_id} for node in partition_members])
+
+        # Use this for any arbitrary test you may want to run
         elif request.query_params.get('request') == 'test':
-            # set my successor's predecessor to be my predecessor (which then looks forever when getting predecessors)
-            predecessors = localNode.predecessors()
-            for predecessor in predecessors:
-                predecessors2 = predecessor.predecessors()
-                for predecessor2 in predecessors2:
-                    predecessor2.set_predecessor(predecessor2)
+            node = localNode.partition_members()[1]
+            print >> sys.stderr, 'Node:', node
+            node.set_partition_member(Node('10.0.0.0'))
+            print >> sys.stderr, node.partition_members()
+            node.remove_partition_member(Node('10.0.0.0'))
+            print >> sys.stderr, 'Removed', node.partition_members()
 
-
-            # Returns my predecessor in a 2-node network now, though before we set the predecessor it returned me.
             return Response({'msg': 'success'})
 
     elif request.method == 'POST':
-        # Change our successor
+        # Add a successor
         if request.query_params.get('request') == 'successor':
             successor_ip = request.data.get('ip_port')
             print >> sys.stderr, "Successor being called", socket.gethostbyname(socket.gethostname())
@@ -71,14 +76,21 @@ def process_remote(request):
                 localNode.set_successor(Node(successor_ip))
                 return Response({'msg': 'success'})
 
-        # Change our predecessor
+        # Add a predecessor
         elif request.query_params.get('request') == 'predecessor':
             predecessor_ip = request.data.get('ip_port')
             if predecessor_ip:
                 localNode.set_predecessor(Node(predecessor_ip))
                 return Response({'msg': 'success'})
 
-        # Join another node
+        # Add a partition member
+        elif request.query_params.get('request') == 'partition_member':
+            partition_member_ip = request.data.get('ip_port')
+            if partition_member_ip:
+                localNode.set_partition_member(Node(partition_member_ip))
+                return Response({'msg': 'success'})
+
+        # Join another node. # TODO: Make this work
         elif request.query_params.get('request') == 'joinme':
             network_ip = request.data.get('ip_port')
             if network_ip:
@@ -88,11 +100,32 @@ def process_remote(request):
                     current_node = current_node.predecessor()
                 return Response({'msg': 'success'})
 
-        # This alerts us to the existence of a new predecessor
+        # This alerts us to the existence of a new predecessor # TODO: Make this work
         elif request.query_params.get('request') == 'notify':
             new_ip = request.data.get('ip_port')
             if new_ip:
                 localNode.notify(Node(new_ip))
+                return Response({'msg': 'success'})
+
+    elif request.method == 'DELETE':
+        # Delete a successor
+        if request.query_params.get('request') == 'successor':
+            successor_ip = request.data.get('ip_port')
+            if successor_ip:
+                localNode.remove_successor(Node(successor_ip))
+                return Response({'msg': 'success'})
+
+        # Delete a predecessor
+        elif request.query_params.get('request') == 'predecessor':
+            predecessor_ip = request.data.get('ip_port')
+            if predecessor_ip:
+                localNode.remove_predecessor(Node(predecessor_ip))
+                return Response({'msg': 'success'})
+
+        elif request.query_params.get('request') == 'partition_member':
+            partition_member_ip = request.data.get('ip_port')
+            if partition_member_ip:
+                localNode.remove_partition_member(Node(partition_member_ip))
                 return Response({'msg': 'success'})
 
     return Response(request.data, status=status.HTTP_400_BAD_REQUEST)

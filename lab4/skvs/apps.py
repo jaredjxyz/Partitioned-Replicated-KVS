@@ -8,6 +8,7 @@ import random
 import sys
 from chord_operations import double_hash, Node
 
+
 class SkvsConfig(AppConfig):
     name = 'skvs'
 
@@ -31,16 +32,20 @@ class SkvsConfig(AppConfig):
                 addresses = [x.strip() for x in os.environ['VIEW'].split(',')]
 
                 partition_size = int(os.environ['K'])
-                num_partitions = int(math.ceil(len(addresses) / partition_size))
+                num_partitions = int(math.ceil(float(len(addresses)) / partition_size))
 
                 # Create empty buckets for each partition and fill them up
                 partitions = [[] for i in range(num_partitions)]
-                for i, address in enumerate(sorted(addresses)):
-                    i %= num_partitions
-                    partitions[i].append(address)
+                partition_number = 0
+                for address in sorted(addresses):
+                    partitions[partition_number].append(address)
+
                     # If we find our address, we know our partition number
                     if address == myIP:
                         my_partition_number = i
+
+                    if len(partitions[i]) == partition_size:
+                        partition_number += 1
 
                 # Randomize the order so that one node doesn't get used more than another
                 for partition in partitions:
@@ -66,5 +71,7 @@ class SkvsConfig(AppConfig):
                 print >> sys.stderr, "Predecessors:", partitions[predecessor_partition_number]
                 print >> sys.stderr, "My Partition:", partitions[my_partition_number]
 
-                chord_operations.localNode.set_successors(map(lambda x: Node(x, my_partition_number), partitions[successor_partition_number]))
-                chord_operations.localNode.set_predecessors(map(lambda x: Node(x, my_partition_number), partitions[predecessor_partition_number]))
+                chord_operations.localNode.set_successors(map(lambda x: Node(x, successor_partition_number), partitions[successor_partition_number]))
+                chord_operations.localNode.set_predecessors(map(lambda x: Node(x, predecessor_partition_number), partitions[predecessor_partition_number]))
+                chord_operations.localNode.set_partition_members(map(lambda x: Node(x, my_partition_number), partitions[my_partition_number]))
+                print >> sys.stderr, chord_operations.localNode.successors()
