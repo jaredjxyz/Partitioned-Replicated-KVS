@@ -114,13 +114,9 @@ class Node(object):
         If this node is a remote node it queries the remote location and tells it to set its successor
         If this node is a local node, it just sets the local successor.
         """
-        if node is None:
-            print >> sys.stderr, 'Setting successor of', socket.gethostbyname(socket.gethostname()), 'to None'
-        elif self.is_local():
-            print >> sys.stderr, 'Setting successor of ', socket.gethostbyname(socket.gethostname()), 'to', node.address
+        if self.is_local():
             self.__successors.append(node)
         else:
-            print >> sys.stderr, 'Setting remote successor of', self.address
             post_successor(self.address, node)
 
     def set_successors(self, nodes):
@@ -139,10 +135,7 @@ class Node(object):
         If this node is a remote node it queries the remote location and tells it to set its successor
         If this node is a local node, it just sets the local successor.
         """
-        if node is None:
-            print >> sys.stderr, 'Setting predecessor of', socket.gethostbyname(socket.gethostname()), 'to None'
-        elif self.is_local():
-            print >> sys.stderr, 'Setting predecessor of ', socket.gethostbyname(socket.gethostname()), 'to', node.address
+        if self.is_local():
             self.__predecessors.append(node)
         else:
             post_predecessor(self.address, node)
@@ -182,9 +175,7 @@ class Node(object):
         """
         if self.is_local():
             for successor_node in self.__successors:
-                print >> sys.stderr, "DAJFAJA"
                 if node.address == successor_node.address:
-                    print >> sys.stderr, "EVDSAKFFGKAS"
                     self.__successors.remove(successor_node)
         else:
             delete_successor(self.address, node)
@@ -254,7 +245,6 @@ class Node(object):
         Checks if we have any entries that belong to our predecessor and, if so, sends them along.
         """
         if self.is_local():
-            print >> sys.stderr, "Notified local"
             predecessor = self.predecessor()
             for entry in KvsEntry.objects.all():
                 if not self.is_mine(entry.key):
