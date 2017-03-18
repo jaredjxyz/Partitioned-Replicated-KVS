@@ -4,7 +4,10 @@ from rest_framework import status
 from skvs.models import KvsEntry
 import requests as req
 import sys
-from chord_operations import localNode, Node, invite_to_join, socket
+from chord_operations import localNode, Node
+import time
+from collections import Counter
+from sys import stderr
 
 
 @api_view(['GET', 'POST', 'DELETE'])
@@ -17,6 +20,7 @@ def gossip(request):
         res = req.get(url_str)
         # TODO compare vector clocks once we have it as a json field in returned data
         # TODO issue replace outdated key, if the vector clocks do not match
+
 
 @api_view(['GET', 'POST', 'DELETE'])
 def process_remote(request):
@@ -47,7 +51,7 @@ def process_remote(request):
             else:
                 correct_successors = localNode.successors()
                 return Response([{'address': node.address,
-                                  'partition_id': node.partition_id}
+                                  'partition_id': node.partition_id()}
                                 for node in correct_successors])
 
         # Get our predecessors
@@ -60,15 +64,21 @@ def process_remote(request):
             else:
                 correct_predecessors = localNode.predecessors()
                 return Response([{'address': node.address,
-                                  'partition_id': node.partition_id} for node in correct_predecessors])
+                                  'partition_id': node.partition_id()} for node in correct_predecessors])
             return Response({'address': correct_predecessor})
+
+        elif request.query_params.get('request') == 'partition_id':
+            partition_id = localNode.partition_id()
+            return Response({'partition_id': partition_id})
 
         # Get our partition members
         elif request.query_params.get('request') == 'partition_members':
             partition_members = localNode.partition_members()
             return Response([{'address': node.address,
-                              'partition_id': node.partition_id} for node in partition_members])
+                              'partition_id': node.partition_id()} for node in partition_members])
 
+        elif request.query_params.get('request') == 'ready':
+            return Response({'msg': localNode.ready})
         # Use this for any arbitrary test you may want to run
         elif request.query_params.get('request') == 'test':
             node = localNode.partition_members()[1]
@@ -100,6 +110,12 @@ def process_remote(request):
             partition_member_ip = request.data.get('ip_port')
             if partition_member_ip:
                 localNode.set_partition_member(Node(partition_member_ip))
+                return Response({'msg': 'success'})
+
+        elif request.query_params.get('request') == 'partition_id':
+            partition_id = request.data.get('id')
+            if partition_id:
+                localNode.set_partition_id(partition_id)
                 return Response({'msg': 'success'})
 
         # Join another node. # TODO: Make this work
@@ -140,7 +156,7 @@ def process_remote(request):
                 localNode.remove_partition_member(Node(partition_member_ip))
                 return Response({'msg': 'success'})
 
-    return Response(request.data, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'msg', 'Invalid Request'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # handles view change requests
@@ -159,9 +175,8 @@ def view_change(request):
         if change_type == 'add':
             # If add, then we signal the given IP to join us
             # try:
-            res = invite_to_join(ip_port)
-
-            return Response(res.json(), status=res.status_code)
+            localNode.join(Node(ip_port))
+            return Response({'msg': 'success'})
             # except Exception:
             #     return Response(status=status.HTTP_400_BAD_REQUEST)
 
@@ -203,6 +218,11 @@ def view_change(request):
 
     return Response({'msg': 'Error: No IP_PORT'}, status=status.HTTP_400_BAD_REQUEST)
 
+# merge counters
+@api_view(['PUT'])
+def payload_update(request):
+    localNode.counter = localNode.counter | eval(request.data['load'])
+    return Response(status=status.HTTP_200_OK)
 
 # handle incorrect keys
 @api_view(['GET', 'PUT', 'DELETE'])
@@ -232,33 +252,64 @@ def kvs_response(request, key):
             if sys.getsizeof(input_value) > 1024 * 1024 * 256:
                 return Response({'msg': 'error', 'error': 'Size of key too big'}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
 
+            t = time.time()
+            localNode.counter[localNode.partition_id()]+=1
+
+            try:
+                desired_entry = KvsEntry.objects.get(key=key)
+            except KvsEntry.DoesNotExist:
+                pass
+
+            for node in localNode.__partition_members():
+                try:
+                    cheq = req.get('http://'+node.address+ '/kvs/' + key)
+                    if 'causal payload' in cheq.json():
+                        if eval(cheq.json()['causal payload'])[localNode.partition_id()] > localNode.counter[localNode.partition_id()]:
+                            localNode.counter = localNode.counter | eval(cheq.json()['causal payload'])
+                            latest = KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json(), 'clock': cheq.json()['causal payload']})
+                except KeyError:
+                    pass
+
             # If object with that key does not exist, it will be created. If it does exist, value will be updated.
-            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value})
+            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t, 'clock': localNode.counter.__str__()})
             if created:
-                return Response({'replaced': 0, 'msg': 'success', 'owner': localNode.address},
+                return Response({'replaced': 0, 'msg': 'success', 'owner': localNode.address, 'time': t, 'causal payload': localNode.counter.__str__()},
                                 status=status.HTTP_201_CREATED)
             else:
-                return Response({'replaced': 1, 'msg': 'success', 'owner': localNode.address},
+                return Response({'replaced': 1, 'msg': 'success', 'owner': localNode.address, 'time': t, 'causal payload': localNode.counter.__str__()},
                                 status=status.HTTP_200_OK)
 
         # if GET, attempt to see if key exists, return found value or resulting error.
         elif method == 'GET':
+
+            for node in localNode.partition_members():
+                try:
+                    cheq = req.get('http://'+ node.address + '/kvs/' + key)
+                    try:
+                        if eval(cheq.json()['causal payload'])[localNode.partition_id()] > localNode.counter[localNode.partition_id()]:
+                            localNode.counter = localNode.counter | eval(eval(cheq.content)['causal payload'])
+                            latest = KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json()['time'], 'clock': cheq.json()['causal payload']})
+                    except (AttributeError, KeyError):
+                        pass
+                except ConnectionError:
+                    pass
+
             try:
                 desired_entry = KvsEntry.objects.get(key=key)
-                return Response({'msg': 'success', 'value': desired_entry.value, 'owner': localNode.address},
+                return Response({'msg': 'success', 'value': desired_entry.value, 'owner': localNode.address, 'time': desired_entry.time, 'causal payload': desired_entry.clock},
                                 status=status.HTTP_200_OK)
             except KvsEntry.DoesNotExist:
                 expectedOwner = localNode.find_successor(key)
                 return Response({'msg': 'error', 'error': 'key does not exist', 'owner': expectedOwner.address}, status=status.HTTP_404_NOT_FOUND)
 
         # check if key exists, delete if so, otherwise return error message
-        elif method == 'DELETE':
-            try:
-                KvsEntry.objects.get(key=key).delete()
-                return Response({'msg': 'success', 'owner': localNode.address}, status=status.HTTP_200_OK)
-            except KvsEntry.DoesNotExist:
-                expectedOwner = localNode.find_successor(key)
-                return Response({'msg': 'error', 'error': 'key does not exist', 'owner': expectedOwner.address}, status=status.HTTP_404_NOT_FOUND)
+        # elif method == 'DELETE':
+        #     try:
+        #         KvsEntry.objects.get(key=key).delete()
+        #         return Response({'msg': 'success', 'owner': localNode.address}, status=status.HTTP_200_OK)
+        #     except KvsEntry.DoesNotExist:
+        #         expectedOwner = localNode.find_successor(key)
+        #         return Response({'msg': 'error', 'error': 'key does not exist', 'owner': expectedOwner.address}, status=status.HTTP_404_NOT_FOUND)
 
     # if it was not ours, we must forward the query to our successor
     else:
@@ -268,6 +319,7 @@ def kvs_response(request, key):
 
         # create the proper url with successor's ip
         url_str = 'http://' + successor_ip + '/kvs/' + key
+        req.put('http://' + successor_ip + '/payload/', data = {'load': repr(localNode.counter)})
 
         if method == 'GET':
             # forward request with query content
@@ -277,9 +329,9 @@ def kvs_response(request, key):
             # forward to main whether or not the request is empty
             res = req.put(url_str, data=request.data)
 
-        elif method == 'DELETE':
-            # forward request as delete operation
-            # check if item exists, delete if so:
-            res = req.delete(url_str)
+        # elif method == 'DELETE':
+        #     # forward request as delete operation
+        #     # check if item exists, delete if so:
+        #     res = req.delete(url_str)
 
         return Response(res.json(), status=res.status_code)
