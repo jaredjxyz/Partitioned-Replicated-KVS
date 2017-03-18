@@ -292,56 +292,49 @@ class Node(object):
         # Find the group the new node should go in
         smallest_group = min(group_numbers_and_sizes, key=lambda x: group_numbers_and_sizes[x])
         smallest_group_size, smallest_group_representative = group_numbers_and_sizes[smallest_group]
+
+        # If there is a group with an empty spot, go there
         if smallest_group_size < int(os.environ['K']):
+
+            new_node.set_partition_id(smallest_group)
+
             for partition_member in smallest_group_representative.partition_members():
                 partition_member.set_partition_member(new_node)
+                new_node.set_partition_member(partition_member)
+
             for successor in smallest_group_representative.successors():
                 successor.set_predecessor(new_node)
+                new_node.set_successor(successor)
+
             for predecessor in smallest_group_representative.predecessors():
                 predecessor.set_successor(new_node)
+                new_node.set_predecessor(predecessor)
+
+            new_node.set_partition_member(new_node)
+
+        # Create our own new partition
         else:
             new_partition_number = max(group_numbers_and_sizes) + 1
             new_node.set_partition_id(new_partition_number)
 
-            my_predecessors = None
-            my_successors = None
-
+            # Find where we belong
             for group_size, node in group_numbers_and_sizes.values():
                 if node.is_mine(new_partition_number):
-                    if not my_successors:
-                        my_successors = node.successors()
+                    my_successors = list(node.successors())
+                    my_predecessors = list(node.partition_members())
                     break
 
-            print >> sys.stderr, "Successors", my_successors
-
-            # Find my predecessors
             for successor in my_successors:
-                # try:
-                if not my_predecessors:
-                    my_predecessors = successor.predecessors()
                 for predecessor in my_predecessors:
                     successor.remove_predecessor(predecessor)
                 successor.set_predecessor(new_node)
-                # except ConnectionError:
-                #     continue
 
             for predecessor in my_predecessors:
-                print >> sys.stderr, 'Predecessors', type(predecessor)
-            print >> sys.stderr, "Successors again", my_successors
-
-            my_successors = copy.deepcopy(my_successors)
-            for predecessor in my_predecessors:
-                # try:
                 for successor in my_successors:
                     print >> sys.stderr, successor, my_successors
                     predecessor.remove_successor(successor)
-                    print >> sys.stderr, "Removed", successor, "From", predecessor
-                    print >> sys.stderr, "MY SUCCESSORS", my_successors
+                    print >> sys.stderr, successor, my_successors
                 predecessor.set_successor(new_node)
-
-                # except ConnectionError:
-
-                #     continue
 
             new_node.set_successors(my_successors)
             new_node.set_predecessors(my_predecessors)

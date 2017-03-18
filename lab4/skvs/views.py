@@ -154,7 +154,7 @@ def process_remote(request):
                 localNode.remove_partition_member(Node(partition_member_ip))
                 return Response({'msg': 'success'})
 
-    return Response(request.data, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'msg', 'Invalid Request'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # handles view change requests
