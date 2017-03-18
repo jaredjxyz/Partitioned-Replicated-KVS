@@ -34,6 +34,9 @@ def process_remote(request):
 
     if request.method == 'GET':
         # Get our successors
+
+        print >> sys.stderr, "GET REQUEST"
+
         if request.query_params.get('request') == 'successors':
             find_address = request.data.get('ip_port')
             # If data has an ip and port, return the successor of that ip and port
