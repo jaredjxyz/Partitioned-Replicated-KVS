@@ -174,7 +174,6 @@ def view_change(request):
             # If add, then we signal the given IP to join us
             # try:
             localNode.join(Node(ip_port))
-
             return Response({'msg': 'success'})
             # except Exception:
             #     return Response(status=status.HTTP_400_BAD_REQUEST)

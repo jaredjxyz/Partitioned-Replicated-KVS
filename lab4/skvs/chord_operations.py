@@ -2,6 +2,7 @@ import sys
 import requests as req
 import os
 import random
+import copy
 from collections import Counter
 from requests.exceptions import ConnectionError
 
@@ -63,12 +64,12 @@ class Node(object):
         self.ready = None
 
     def id(self):
-        return double_hash(self.partition_id) % SIZE
+        return double_hash(self.partition_id()) % SIZE
 
     # determine if this key is stored on our node
     def is_mine(self, key):
         key_location = double_hash(key) % SIZE
-        return in_range(key_location, self.predecessor().id(), self.id())
+        return in_range(key_location, self.predecessors()[0].id(), self.id())
 
     # query successor's ip so we can forward request
     def get_successor_ip(self):
@@ -272,7 +273,7 @@ class Node(object):
 
     def join(self, new_node):
         # Find our successors and keep finding their successors until there's a not full group
-        group_numbers_and_sizes = {self.partition_id: (len(self.partition_members()), self)}
+        group_numbers_and_sizes = {self.partition_id(): (len(self.partition_members()), self)}
         current_group = self.successors()
 
         print >> sys.stderr, "Got successors"
@@ -281,18 +282,17 @@ class Node(object):
             for node in current_group:
                 try:  # Try all nodes in group till one responds
                     group_size = len(node.partition_members())
-                    group_number = node.partition_id
+                    group_number = node.partition_id()
                     group_numbers_and_sizes[group_number] = (group_size, node)
                     current_group = node.successors()
                     break
                 except ConnectionError:  # They're down
                     continue
 
-        print >> sys.stderr, "Got group ids", group_numbers_and_sizes
         # Find the group the new node should go in
         smallest_group = min(group_numbers_and_sizes, key=lambda x: group_numbers_and_sizes[x])
         smallest_group_size, smallest_group_representative = group_numbers_and_sizes[smallest_group]
-        if smallest_group_size < os.environ['K']:
+        if smallest_group_size < int(os.environ['K']):
             for partition_member in smallest_group_representative.partition_members():
                 partition_member.set_partition_member(new_node)
             for successor in smallest_group_representative.successors():
@@ -303,28 +303,45 @@ class Node(object):
             new_partition_number = max(group_numbers_and_sizes) + 1
             new_node.set_partition_id(new_partition_number)
 
+            my_predecessors = None
+            my_successors = None
+
             for group_size, node in group_numbers_and_sizes.values():
                 if node.is_mine(new_partition_number):
-                    my_successors = node.successors()
+                    if not my_successors:
+                        my_successors = node.successors()
+                    break
+
+            print >> sys.stderr, "Successors", my_successors
 
             # Find my predecessors
             for successor in my_successors:
-                try:
+                # try:
+                if not my_predecessors:
                     my_predecessors = successor.predecessors()
-                    for predecessor in my_predecessors:
-                        successor.remove_predecessor(predecessor)
-                    successor.set_predecessor(new_node)
-                except ConnectionError:
-                    continue
+                for predecessor in my_predecessors:
+                    successor.remove_predecessor(predecessor)
+                successor.set_predecessor(new_node)
+                # except ConnectionError:
+                #     continue
 
             for predecessor in my_predecessors:
-                try:
-                    for successor in my_successors:
-                        predecessor.remove_successor(successor)
-                    predecessor.set_predecessor(new_node)
+                print >> sys.stderr, 'Predecessors', type(predecessor)
+            print >> sys.stderr, "Successors again", my_successors
 
-                except ConnectionError:
-                    continue
+            my_successors = copy.deepcopy(my_successors)
+            for predecessor in my_predecessors:
+                # try:
+                for successor in my_successors:
+                    print >> sys.stderr, successor, my_successors
+                    predecessor.remove_successor(successor)
+                    print >> sys.stderr, "Removed", successor, "From", predecessor
+                    print >> sys.stderr, "MY SUCCESSORS", my_successors
+                predecessor.set_successor(new_node)
+
+                # except ConnectionError:
+
+                #     continue
 
             new_node.set_successors(my_successors)
             new_node.set_predecessors(my_predecessors)
@@ -353,7 +370,7 @@ class Node(object):
         """
         Returns a string-representation of self for printing
         """
-        return Node.__name__ + '(' + 'address=' + repr(self.address) + ', partition_id=' + repr(self.partition_id) + ')'
+        return Node.__name__ + '(' + 'address=' + repr(self.address) + ')'
 
 
 # Communication functions
@@ -383,6 +400,7 @@ def get_partition_members(address):
     """
     res = req.get('http://' + address + '/kvs', params={'request': 'partition_members'})
     # Partition members come in as a list of dicts
+    print >> sys.stderr, res.text
     partition_members = res.json()
     return map(lambda params: Node(**params), partition_members)
 
@@ -394,7 +412,7 @@ def post_successor(address, node):
     req.post('http://' + address + '/kvs',
              params={'request': 'successor'},
              data={'ip_port': node.address,
-                   'partition_id': node.partition_id})
+                   'partition_id': node.partition_id()})
 
 
 def post_predecessor(address, node):
@@ -404,7 +422,7 @@ def post_predecessor(address, node):
     req.post('http://' + address + '/kvs',
              params={'request': 'predecessor'},
              data={'ip_port': node.address,
-                   'partition_id': node.partition_id})
+                   'partition_id': node.partition_id()})
 
 
 def post_partition_member(address, node):
@@ -414,7 +432,7 @@ def post_partition_member(address, node):
     req.post('http://' + address + '/kvs',
              params={'request': 'partition_member'},
              data={'ip_port': node.address,
-                   'partition_id': node.partition_id})
+                   'partition_id': node.partition_id()})
 
 
 def delete_successor(address, node):
@@ -445,10 +463,10 @@ def delete_partition_member(address, node):
 
 
 def get_partition_id(address):
-    req.get('http://' + address + '/kvs',
+    res = req.get('http://' + address + '/kvs',
             params={'request': 'partition_id'})
 
-    return req.json()['partition_id']
+    return res.json()['partition_id']
 
 
 def send_partition_id(address, partition_id):
