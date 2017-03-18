@@ -74,6 +74,7 @@ class SkvsConfig(AppConfig):
                 print >> sys.stderr, "Predecessors:", partitions[predecessor_partition_number]
                 print >> sys.stderr, "My Partition:", partitions[my_partition_number]
 
+                chord_operations.localNode.set_partition_id(my_partition_number)
                 chord_operations.localNode.set_successors(map(lambda x: Node(x, successor_partition_number), partitions[successor_partition_number]))
                 chord_operations.localNode.set_predecessors(map(lambda x: Node(x, predecessor_partition_number), partitions[predecessor_partition_number]))
                 chord_operations.localNode.set_partition_members(map(lambda x: Node(x, my_partition_number), partitions[my_partition_number]))

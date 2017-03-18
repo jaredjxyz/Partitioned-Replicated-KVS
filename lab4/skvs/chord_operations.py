@@ -1,10 +1,11 @@
 import sys
 import requests as req
-from collections import Counter
+import os
 import random
+from collections import Counter
 from requests.exceptions import ConnectionError
 
-# from skvs.models import KvsEntry
+KvsEntry = None
 # This can't be imported directly into here because of how Django works,
 # but is imported into here from apps.py, so you can use it.
 
@@ -57,7 +58,7 @@ class Node(object):
         self.__predecessors = []
         # initialize empty partition members
         self.__partition_members = []
-        self.partition_id = partition_id
+        self.__partition_id = partition_id
 
         self.ready = None
 
@@ -121,6 +122,15 @@ class Node(object):
         else:
             return get_partition_members(self.address)
 
+    def partition_id(self):
+        """
+        Returns this node's partition ID, contacts the actual node if necessary
+        """
+        if self.is_local():
+            return self.__partition_id
+        else:
+            return get_partition_id(self.address)
+
     def set_successor(self, node):
         """
         Sets the successor node of this node, given and address
@@ -182,6 +192,15 @@ class Node(object):
             for node in nodes:
                 post_partition_member(self.address, node)
 
+    def set_partition_id(self, partition_id):
+        """
+        Sets this node's partition ID
+        """
+        if self.is_local():
+            self.__partition_id = partition_id
+        else:
+            send_partition_id(self.address, partition_id)
+
     def remove_successor(self, node):
         """
         Removes successor from this node
@@ -217,6 +236,16 @@ class Node(object):
 
     # ######## Code for finding successor node of an identifier ######## #
 
+    def set_partition_id(self, partition_id):
+        """
+        Sets the partition ID of the node
+        """
+        if self.is_local():
+            self.__partition_id = partition_id
+        else:
+            send_partition_id(self.address, partition_id)
+
+
     # have this Node find the successor of a given slot
     def find_successor(self, key):
         desired_node = self.find_predecessor(key)
@@ -241,15 +270,64 @@ class Node(object):
 
     # ######## Code for joining the distributed hash table ######## #
 
-    def join(self, existing_node):
-        mySuccessor = existing_node.find_successor(self.address)
-        myPredecessor = mySuccessor.predecessor()
-        self.__successor = mySuccessor
-        self.__predecessor = myPredecessor
-        self.predecessor().set_successor(self)
-        self.successor().set_predecessor(self)
-        # Our successor has some of our keys. Tell it to give them to us
-        self.successor().notify(self)
+    def join(self, new_node):
+        # Find our successors and keep finding their successors until there's a not full group
+        group_numbers_and_sizes = {self.partition_id: (len(self.partition_members()), self)}
+        current_group = self.successors()
+
+        print >> sys.stderr, "Got successors"
+        # Get a list of partition numbers and their sizes and their representative nodes
+        while not any(self.address == node.address for node in current_group):  # While I'm not in the successors list
+            for node in current_group:
+                try:  # Try all nodes in group till one responds
+                    group_size = len(node.partition_members())
+                    group_number = node.partition_id
+                    group_numbers_and_sizes[group_number] = (group_size, node)
+                    current_group = node.successors()
+                    break
+                except ConnectionError:  # They're down
+                    continue
+
+        print >> sys.stderr, "Got group ids", group_numbers_and_sizes
+        # Find the group the new node should go in
+        smallest_group = min(group_numbers_and_sizes, key=lambda x: group_numbers_and_sizes[x])
+        smallest_group_size, smallest_group_representative = group_numbers_and_sizes[smallest_group]
+        if smallest_group_size < os.environ['K']:
+            for partition_member in smallest_group_representative.partition_members():
+                partition_member.set_partition_member(new_node)
+            for successor in smallest_group_representative.successors():
+                successor.set_predecessor(new_node)
+            for predecessor in smallest_group_representative.predecessors():
+                predecessor.set_successor(new_node)
+        else:
+            new_partition_number = max(group_numbers_and_sizes) + 1
+            new_node.set_partition_id(new_partition_number)
+
+            for group_size, node in group_numbers_and_sizes.values():
+                if node.is_mine(new_partition_number):
+                    my_successors = node.successors()
+
+            # Find my predecessors
+            for successor in my_successors:
+                try:
+                    my_predecessors = successor.predecessors()
+                    for predecessor in my_predecessors:
+                        successor.remove_predecessor(predecessor)
+                    successor.set_predecessor(new_node)
+                except ConnectionError:
+                    continue
+
+            for predecessor in my_predecessors:
+                try:
+                    for successor in my_successors:
+                        predecessor.remove_successor(successor)
+                    predecessor.set_predecessor(new_node)
+
+                except ConnectionError:
+                    continue
+
+            new_node.set_successors(my_successors)
+            new_node.set_predecessors(my_predecessors)
 
     # new_node may be our predecessor
     def notify(self, new_node):
@@ -366,13 +444,20 @@ def delete_partition_member(address, node):
                data={'ip_port': node.address})
 
 
-def invite_to_join(address):
+def get_partition_id(address):
+    req.get('http://' + address + '/kvs',
+            params={'request': 'partition_id'})
+
+    return req.json()['partition_id']
+
+
+def send_partition_id(address, partition_id):
     """
-    Tells address to join us
+    Tells address to set its partition id to partition_id
     """
-    return req.post('http://' + address + '/kvs',
-                    params={'request': 'joinme'},
-                    data={'ip_port': localNode.address})
+    req.post('http://' + address + '/kvs',
+             params={'request': 'partition_id'},
+             data={'id': partition_id})
 
 
 def sendKVSEntry(address, key, value):
