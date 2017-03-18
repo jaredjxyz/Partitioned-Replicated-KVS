@@ -345,6 +345,7 @@ class Node(object):
 
             new_node.set_successors(my_successors)
             new_node.set_predecessors(my_predecessors)
+            new_node.set_partition_member(new_node)
 
     # new_node may be our predecessor
     def notify(self, new_node):
