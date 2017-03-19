@@ -4,9 +4,9 @@ from rest_framework import status
 from skvs.models import KvsEntry
 import requests as req
 import sys
-from chord_operations import localNode, Node
 import time
 from collections import Counter
+from chord_operations import localNode, Node
 
 
 @api_view(['GET', 'POST', 'DELETE'])
@@ -287,7 +287,7 @@ def kvs_response(request, key):
                 return Response({'msg': 'error', 'error': 'Size of key too big'}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
 
             # get timestamp and counter
-            t = float("{0:.2f}".format(time.time())) # jared magic
+            t = float("{0:.2f}".format(time.time()))  # jared magic
             localNode.counter[localNode.partition_id()] += 1
 
             # try:
