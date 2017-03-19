@@ -241,6 +241,13 @@ def payload_update(request):
 def bad_key_response(request, key):
     return Response(status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
 
+@api_view(['PUT'])
+def broadcast_put(request):
+
+    merge = request.data
+    localNode.counter = localNode.counter | eval(merge['causal payload'])
+    create = KvsEntry.objects.update_or_create(key=key, defaults={'value': merge['value'], 'time': merge['time'], 'clock': localNode.counter.__str__()})
+
 
 # handle correct keys
 @api_view(['GET', 'PUT', 'DELETE'])
@@ -272,18 +279,16 @@ def kvs_response(request, key):
             except KvsEntry.DoesNotExist:
                 pass
 
+            # If object with that key does not exist, it will be created. If it does exist, value will be updated.
+            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t, 'clock': localNode.counter.__str__()})
+
             for node in localNode.__partition_members():
                 try:
-                    cheq = req.get('http://'+node.address+ '/kvs/' + key)
-                    if 'causal payload' in cheq.json():
-                        if eval(cheq.json()['causal payload'])[localNode.partition_id()] > localNode.counter[localNode.partition_id()]:
-                            localNode.counter = localNode.counter | eval(cheq.json()['causal payload'])
-                            latest = KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json()['time'], 'clock': cheq.json()['causal payload']})
+                    req.put('http://'+node.address+'/broadcast_put/', data = {'value': input_value, 'time': t, 'clock': localNode.counter.__str__()}})
+
                 except Exception:
                     pass
 
-            # If object with that key does not exist, it will be created. If it does exist, value will be updated.
-            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t, 'clock': localNode.counter.__str__()})
             if created:
                 return Response({'replaced': 0, 'msg': 'success', 'owner': localNode.address, 'time': t, 'causal payload': localNode.counter.__str__()},
                                 status=status.HTTP_201_CREATED)
@@ -294,16 +299,15 @@ def kvs_response(request, key):
         # if GET, attempt to see if key exists, return found value or resulting error.
         elif method == 'GET':
 
-            for node in localNode.partition_members():
+
+            for node in localNode.__partition_members():
                 try:
-                    cheq = req.get('http://'+ node.address + '/kvs/' + key)
-                    try:
+                    cheq = req.get('http://'+node.address+ '/kvs/' + key)
+                    if 'causal payload' in cheq.json():
                         if eval(cheq.json()['causal payload'])[localNode.partition_id()] > localNode.counter[localNode.partition_id()]:
-                            localNode.counter = localNode.counter | eval(eval(cheq.content)['causal payload'])
+                            localNode.counter = localNode.counter | eval(cheq.json()['causal payload'])
                             latest = KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json()['time'], 'clock': cheq.json()['causal payload']})
-                    except (AttributeError, KeyError):
-                        pass
-                except ConnectionError:
+                except Exception:
                     pass
 
             try:
