@@ -354,6 +354,7 @@ class Node(object):
             new_node.set_partition_member(new_node)
 
         # Stick notify here
+        self.notify(new_node)
         new_node.run_gossip()
 
     # new_node may be our predecessor
@@ -364,7 +365,7 @@ class Node(object):
         Checks if we have any entries that belong to our predecessor and, if so, sends them along.
         """
         if self.is_local():
-            predecessor = self.predecessor()
+            predecessor = list(self.predecessors())[0]
             for entry in KvsEntry.objects.all():
                 if not self.is_mine(entry.key):
                     self.sendKVSEntry(predecessor, entry.key, entry.value)
