@@ -3,6 +3,8 @@ import requests as req
 import os
 import random
 import copy
+import time
+from time import sleep
 from collections import Counter
 from requests.exceptions import ConnectionError
 
@@ -33,7 +35,7 @@ def in_range(c, a, b):
     return a <= c or c < b
 
 
-# ## This is initialized at Django startup (see apps.py)
+# This is initialized at Django startup (see apps.py)
 localNode = None
 
 
@@ -73,7 +75,7 @@ class Node(object):
 
     # query successor's ip so we can forward request
     def get_successor_ip(self):
-        return self.successor().address
+        return self.successors()[0].address
 
     def is_local(self):
         return self == localNode
@@ -81,7 +83,7 @@ class Node(object):
     def is_remote(self):
         return self != localNode
 
-    # ## Run gossip in background randomly within an alright range of time
+    # Run gossip in background randomly within an alright range of time
     def run_gossip(self):
         # TODO set up so gossip runs every few seconds as a thread. Move wait_time to be a fixed attribute elsewhere
         # each node has a fixed amount of time it waits before issues gossip request to its partition members
@@ -89,8 +91,8 @@ class Node(object):
         partner_node = random.choice(self.__partition_members)
         req.put('http://' + partner_node + '/kvs/gossip', params={'request': 'gossip'}, data={'ip_port': self.address})
 
-    # ## Code for getting and setting successor and predecessor.
-    # ## Use these for setting and getting, do NOT use the assignment operation on __successor or __predecessor
+    # Code for getting and setting successor and predecessor.
+    # Use these for setting and getting, do NOT use the assignment operation on __successor or __predecessor
 
     def successors(self):
         """
@@ -457,6 +459,8 @@ def delete_partition_member(address, node):
 
 
 def get_partition_id(address):
+    print >> sys.stderr, "CALLING GET_PARTITION_ID"
+    sleep(1)
     res = req.get('http://' + address + '/kvs',
             params={'request': 'partition_id'})
 
@@ -498,5 +502,4 @@ def ask_ready(address):
 
     except ConnectionError:
         return None
-
     return res.json()['msg']

@@ -15,12 +15,13 @@ class SkvsConfig(AppConfig):
     name = 'skvs'
 
     def ready(self):
+        print >> sys.stderr, "Getting Django ready!"
         # Import kvsentry into chord operations
         from models import KvsEntry
         chord_operations.KvsEntry = KvsEntry
 
         myIP = os.environ.get('IPPORT')
-        print >> sys.stderr, myIP
+        print >> sys.stderr, "This is my IP: ", myIP
 
         # Checks for the case when Django's second thread starts up
         # We have to do this because of how Django's auto-load works
@@ -86,11 +87,11 @@ class SkvsConfig(AppConfig):
                 readyThread = Thread(target=getReady, args=[addresses])
                 readyThread.start()
 
-
 def getReady(addresses):
-    while True:
-        sleep(1)
-        readyAddresses = [chord_operations.ask_ready(address) is not None for address in addresses]
-        if all(readyAddresses):
-            chord_operations.localNode.ready = True
-            return
+    pass
+    # while True:
+    #     sleep(1)
+    #     readyAddresses = [chord_operations.ask_ready(address) is not None for address in addresses]
+    #     if all(readyAddresses):
+    #         chord_operations.localNode.ready = True
+    #         return

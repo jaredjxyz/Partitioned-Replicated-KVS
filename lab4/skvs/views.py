@@ -6,9 +6,43 @@ import requests as req
 import sys
 from chord_operations import localNode, Node
 import time
+from time import sleep
 from collections import Counter
 from sys import stderr
 
+
+@api_view(['GET', 'POST', 'DELETE'])
+def get_partition_id(request):
+    if request.method == 'GET':
+        return Response({'msg': 'success',
+                          'partition_id': localNode.partition_id()})
+    else:
+        return Response({'msg': 'error',
+                         'error': 'only GET requests can obtain partition id'},
+                         status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET', 'POST', 'DELETE'])
+def get_partition_members(request):
+    if request.method == 'GET':
+        requested_id = int(request.data.get('partition_id'))
+        
+            if requested_id:
+                if localNode.partition_id() == requested_id:
+                    members = [node.address for node in localNode.partition_members()]
+                    return Response({'msg': 'success',
+                                     'partition_members': members})
+
+                else:
+                    successor_ip = localNode.get_successor_ip()
+                    req.get('http://' + successor_ip + '/kvs/get_partition_members',
+                            data={'partition_id': requested_id})
+            else:
+                return Response({'msg': 'error', 'error': 'invalid partition id'},
+                                 status=status.HTTP_400_BAD_REQUEST)
+    else:
+        return Response({'msg': 'error',
+                         'error': 'only GET requests can obtain partition id'},
+                         status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET', 'POST', 'DELETE'])
 def gossip(request):
@@ -36,10 +70,10 @@ def process_remote(request):
     This is called from ip:port/kvs
     """
 
+    print >> sys.stderr, "Calling process_remote!"
+
     if request.method == 'GET':
         # Get our successors
-
-        print >> sys.stderr, "GET REQUEST"
 
         if request.query_params.get('request') == 'successors':
             find_address = request.data.get('ip_port')
@@ -79,14 +113,17 @@ def process_remote(request):
 
         elif request.query_params.get('request') == 'ready':
             return Response({'msg': localNode.ready})
+
         # Use this for any arbitrary test you may want to run
         elif request.query_params.get('request') == 'test':
-            node = localNode.partition_members()[1]
-            print >> sys.stderr, 'Node:', node
-            node.set_partition_member(Node('10.0.0.0'))
-            print >> sys.stderr, node.partition_members()
-            node.remove_partition_member(Node('10.0.0.0'))
-            print >> sys.stderr, 'Removed', node.partition_members()
+
+            # node = localNode.partition_members()[1]
+            # print >> sys.stderr, 'Node:', node
+            # node.set_partition_member(Node('10.0.0.0'))
+            # print >> sys.stderr, node.partition_members()
+            # node.remove_partition_member(Node('10.0.0.0'))
+            # print >> sys.stderr, 'Removed', node.partition_members()
+
             return Response({'msg': 'success'})
 
     elif request.method == 'POST':
@@ -236,6 +273,7 @@ def kvs_response(request, key):
     """
     Key comes in guaranteed to be r'[a-zA-Z0-9_]' between 1 and 250 characters thanks to the magic of regex and urls.py
     """
+    print >> sys.stderr, "Calling kvs_response!"
     method = request.method
 
     # if we are the main instance, retrieve requested data
