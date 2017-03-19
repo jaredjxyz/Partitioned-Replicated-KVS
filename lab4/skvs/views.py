@@ -279,10 +279,10 @@ def kvs_response(request, key):
             t = time.time()
             localNode.counter[localNode.partition_id()]+=1
 
-            try:
-                desired_entry = KvsEntry.objects.get(key=key)
-            except KvsEntry.DoesNotExist:
-                pass
+            # try:
+            #     desired_entry = KvsEntry.objects.get(key=key)
+            # except KvsEntry.DoesNotExist:
+            #     pass
 
             # If object with that key does not exist, it will be created. If it does exist, value will be updated.
             obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
@@ -303,6 +303,8 @@ def kvs_response(request, key):
         # if GET, attempt to see if key exists, return found value or resulting error.
         elif method == 'GET':
 
+
+            # read repair for gets since you're polling everyone anyways
             for node in localNode.__partition_members():
                 try:
                     cheq = req.get('http://'+node.address+ '/kvs/' + key)
@@ -312,7 +314,9 @@ def kvs_response(request, key):
                             latest = KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json()['time'], 'clock': cheq.json()['causal payload']})
                         if eval(cheq.json()['causal payload'])[localNode.partition_id()] == localNode.counter[localNode.partition_id()] and not KvsEntry.objects.get(key=key).key == cheq.json()['key']:
                             # tiebreak and fix if they win tiebreak
-                            pass
+                            if str(node.address)+(cheq.json()['time']) > str(localNode.address) + str(KvsEntry.objects.get(key=key).time):
+                                latest = KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json()['time'], 'clock': cheq.json()['causal payload']})
+                            # pass
 
 
                 except Exception:
