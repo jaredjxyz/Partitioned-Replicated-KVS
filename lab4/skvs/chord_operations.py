@@ -84,8 +84,6 @@ class Node(object):
 
     # ## Run gossip in background randomly within an alright range of time
     def run_gossip(self, in_thread=False):
-        # TODO set up so gossip runs every few seconds as a thread. Move wait_time to be a fixed attribute elsewhere
-        # each node has a fixed amount of time it waits before issues gossip request to its partition members
         if self.is_local():
             # If we're already in a separate thread, run gossip in this thread
             if in_thread:
@@ -268,7 +266,6 @@ class Node(object):
                         break
                 except ConnectionError:
                     continue
-        print >> sys.stderr, "The owner of key", key, "is", current_partition[0].partition_id()
         return current_partition
 
     # have this Node find the predecessor of a given slot
@@ -295,7 +292,6 @@ class Node(object):
         group_numbers_and_sizes = {self.partition_id(): (len(self.partition_members()), self)}
         current_group = self.successors()
 
-        print >> sys.stderr, "Got successors"
         # Get a list of partition numbers and their sizes and their representative nodes
         while not any(self.address == node.address for node in current_group):  # While I'm not in the successors list
             for node in current_group:
@@ -350,9 +346,7 @@ class Node(object):
 
             for predecessor in my_predecessors:
                 for successor in my_successors:
-                    print >> sys.stderr, successor, my_successors
                     predecessor.remove_successor(successor)
-                    print >> sys.stderr, successor, my_successors
                 predecessor.set_successor(new_node)
 
             new_node.set_successors(my_successors)
@@ -363,6 +357,7 @@ class Node(object):
         new_node.run_gossip()
 
     # new_node may be our predecessor
+    # TODO: Get this working and add it to the end of join, as well as other key migrations
     def notify(self, new_node):
         """
         Sets our predecessor to be the given node
@@ -416,7 +411,6 @@ def get_partition_members(address):
     """
     res = req.get('http://' + address + '/kvs', params={'request': 'partition_members'})
     # Partition members come in as a list of dicts
-    print >> sys.stderr, res.text
     partition_members = res.json()
     return map(lambda params: Node(**params), partition_members)
 

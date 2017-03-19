@@ -5,7 +5,7 @@ from skvs.models import KvsEntry
 import requests as req
 import sys
 import time
-from collections import Counter
+from collections import Counter  # Don't listen to the linter he LIES and tells you we're not using this. Bad linter. No.
 from chord_operations import localNode, Node
 
 
@@ -196,6 +196,7 @@ def view_change(request):
             # except Exception:
             #     return Response(status=status.HTTP_400_BAD_REQUEST)
 
+        # TODO: Get Remove working.
         elif change_type == 'remove':
             # if we are the node that is going to be removed
             if ip_port == localNode.address:
@@ -294,11 +295,6 @@ def kvs_response(request, key):
             t = float("{0:.2f}".format(time.time()))  # jared magic
             localNode.counter[localNode.partition_id()] += 1
 
-            # try:
-            #     desired_entry = KvsEntry.objects.get(key=key)
-            # except KvsEntry.DoesNotExist:
-            #     pass
-
             # If object with that key does not exist, it will be created. If it does exist, value will be updated.
             obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
 
@@ -351,15 +347,6 @@ def kvs_response(request, key):
                 expectedOwner = localNode.find_successors(key)[0]
                 return Response({'msg': 'error', 'error': 'key does not exist', 'partition_id': expectedOwner.partition_id()}, status=status.HTTP_404_NOT_FOUND)
 
-        # check if key exists, delete if so, otherwise return error message
-        # elif method == 'DELETE':
-        #     try:
-        #         KvsEntry.objects.get(key=key).delete()
-        #         return Response({'msg': 'success', 'owner': localNode.address}, status=status.HTTP_200_OK)
-        #     except KvsEntry.DoesNotExist:
-        #         expectedOwner = localNode.find_successor(key)
-        #         return Response({'msg': 'error', 'error': 'key does not exist', 'owner': expectedOwner.address}, status=status.HTTP_404_NOT_FOUND)
-
     # if it was not ours, we must forward the query to our successor
     else:
 
@@ -377,10 +364,5 @@ def kvs_response(request, key):
         elif method == 'PUT':
             # forward to main whether or not the request is empty
             res = req.put(url_str, data=request.data)
-
-        # elif method == 'DELETE':
-        #     # forward request as delete operation
-        #     # check if item exists, delete if so:
-        #     res = req.delete(url_str)
 
         return Response(res.json(), status=res.status_code)
