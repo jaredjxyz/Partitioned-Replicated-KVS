@@ -147,6 +147,10 @@ def process_remote(request):
                 localNode.notify(Node(new_ip))
                 return Response({'msg': 'success'})
 
+        elif request.query_params.get('request') == 'run_gossip':
+            localNode.run_gossip()
+            return Response({'msg': 'success'})
+
     elif request.method == 'DELETE':
         # Delete a successor
         if request.query_params.get('request') == 'successor':

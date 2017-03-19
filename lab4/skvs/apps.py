@@ -90,4 +90,8 @@ def getReady(addresses):
         readyAddresses = [chord_operations.ask_ready(address) is not None for address in addresses]
         if all(readyAddresses):
             chord_operations.localNode.ready = True
+            chord_operations.localNode.run_gossip()
             return
+
+
+

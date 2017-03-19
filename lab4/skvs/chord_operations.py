@@ -4,6 +4,8 @@ import os
 import random
 from collections import Counter
 from requests.exceptions import ConnectionError
+from time import sleep
+from threading import Thread
 
 KvsEntry = None
 # This can't be imported directly into here because of how Django works,
@@ -81,12 +83,27 @@ class Node(object):
         return self != localNode
 
     # ## Run gossip in background randomly within an alright range of time
-    def run_gossip(self):
+    def run_gossip(self, in_thread=False):
         # TODO set up so gossip runs every few seconds as a thread. Move wait_time to be a fixed attribute elsewhere
         # each node has a fixed amount of time it waits before issues gossip request to its partition members
-        wait_time = random.randint(5, len(self.__partition_members))
-        partner_node = random.choice(self.__partition_members)
-        req.put('http://' + partner_node + '/kvs/gossip', params={'request': 'gossip'}, data={'ip_port': self.address})
+        if self.is_local():
+            # If we're already in a separate thread, run gossip in this thread
+            if in_thread:
+                while True:
+                    # Wait between 0 and (# of partition members)*5 seconds
+                    wait_time = random.random() * len(self.partition_members()) * 5
+                    sleep(wait_time)
+
+                    # Tell a random other node in our partition to ask around
+                    partner_node = random.choice(self.__partition_members)
+                    req.put('http://' + partner_node.address + '/kvs/gossip', params={'request': 'gossip'}, data={'ip_port': self.address})
+
+            # If we're not already in a separate thread, create a new separate thread and run it
+            else:
+                gossipThread = Thread(target=self.run_gossip, kwargs={'in_thread': True})
+                gossipThread.start()
+        else:
+            run_gossip(self.address)
 
     # ## Code for getting and setting successor and predecessor.
     # ## Use these for setting and getting, do NOT use the assignment operation on __successor or __predecessor
@@ -342,6 +359,9 @@ class Node(object):
             new_node.set_predecessors(my_predecessors)
             new_node.set_partition_member(new_node)
 
+        # Stick notify here
+        new_node.run_gossip()
+
     # new_node may be our predecessor
     def notify(self, new_node):
         """
@@ -488,6 +508,14 @@ def notify(address, node):
     req.post('http://' + address + '/kvs',
              params={'request': 'notify'},
              data={'ip_port': node.address})
+
+
+def run_gossip(address):
+    """
+    Tells address to start gossipping
+    """
+    req.post('http://' + address + '/kvs',
+             params={'request': 'run_gossip'})
 
 
 def ask_ready(address):
