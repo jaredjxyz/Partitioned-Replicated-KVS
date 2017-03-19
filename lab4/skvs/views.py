@@ -16,20 +16,22 @@ def gossip(request):
     # compare all my keys to my partner's keys
     for entry in KvsEntry.objects.all():
         url_str = 'http://' + partner_ip_port + '/kvs/' + entry.key
+
         # get same key from partner
         partner_vc = eval(req.get(url_str).json()['causal payload'])
         # if our vector clocks are not equal
-        if not eval(entry.clock)[localNode.partition_id] == partner_vc[localNode.partition_id]:
+        if not eval(entry.clock)[localNode.partition_id()] == partner_vc[localNode.partition_id()]:
             temp = localNode.counter
             localNode.counter = localNode.counter | partner_vc
             # update our key if it is the stale one
-            if partner_vc[localNode.partition_id] > temp[localNode.partition_id]:
+            if partner_vc[localNode.partition_id()] > temp[localNode.partition_id()]:
                 KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'], 'time': req.get(url_str).json()['time'], 'clock': repr(localNode.counter | partner_vc)})
             # TODO tiebreaker based on server id + timestamp
-            # elif :
-            elif
+            # elif : partner wins the tiebreak
+            elif str(partner_ip_port)+str(req.get(url_str).json()['time']) > str(localNode.address)+str(KvsEntry.objects.get(key=key).time):
+                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'], 'time': req.get(url_str).json()['time'], 'clock': repr(localNode.counter | partner_vc)})
         # if vector clocks are equal, but the stored times are different, tiebreak
-        if eval(entry.clock)[localNode.partition_id] == partner_vc[localNode.partition_id] and not entry.time == req.get(url_str).json()['time']:
+        if eval(entry.clock)[localNode.partition_id()] == partner_vc[localNode.partition_id()] and not entry.time == req.get(url_str).json()['time']:
             # if we are the stale value, update our key to partner's key
             if entry.time < req.get(url_str).json()['time']:
                 KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'], 'time': req.get(url_str).json()['time'], 'clock': repr(localNode.counter | partner_vc)})
@@ -247,7 +249,7 @@ def bad_key_response(request, key):
 def broadcast_put(request):
     merge = request.data
     localNode.counter = localNode.counter | eval(merge['clock'])
-    create = KvsEntry.objects.update_or_create(key=key, defaults={'value': merge['value'], 'time': merge['time'], 'clock': localNode.counter.__str__()})
+    create = KvsEntry.objects.update_or_create(key=key, defaults={'value': merge['value'], 'time': merge['time'], 'clock': repr(localNode.counter)})
     return Response(status=status.HTTP_200_OK)
 
 
@@ -273,6 +275,7 @@ def kvs_response(request, key):
             if sys.getsizeof(input_value) > 1024 * 1024 * 256:
                 return Response({'msg': 'error', 'error': 'Size of key too big'}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
 
+            # get timestamp and counter
             t = time.time()
             localNode.counter[localNode.partition_id()]+=1
 
@@ -282,19 +285,19 @@ def kvs_response(request, key):
                 pass
 
             # If object with that key does not exist, it will be created. If it does exist, value will be updated.
-            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t, 'clock': localNode.counter.__str__()})
+            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
 
             for node in localNode.__partition_members():
                 try:
-                    req.put('http://'+node.address+'/broadcast_put/', data = {'value': input_value, 'time': t, 'clock': localNode.counter.__str__()}})
+                    req.put('http://'+node.address+'/broadcast_put/', data = {'value': input_value, 'time': t, 'clock': repr(localNode.counter)}})
                 except Exception:
                     pass
 
             if created:
-                return Response({'replaced': 0, 'msg': 'success', 'owner': localNode.address, 'time': t, 'causal payload': localNode.counter.__str__()},
+                return Response({'replaced': 0, 'msg': 'success', 'owner': localNode.address, 'time': t, 'causal payload': repr(localNode.counter)},
                                 status=status.HTTP_201_CREATED)
             else:
-                return Response({'replaced': 1, 'msg': 'success', 'owner': localNode.address, 'time': t, 'causal payload': localNode.counter.__str__()},
+                return Response({'replaced': 1, 'msg': 'success', 'owner': localNode.address, 'time': t, 'causal payload': repr(localNode.counter)},
                                 status=status.HTTP_200_OK)
 
         # if GET, attempt to see if key exists, return found value or resulting error.
