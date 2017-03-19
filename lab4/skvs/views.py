@@ -27,6 +27,7 @@ def gossip(request):
                 KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'], 'time': req.get(url_str).json()['time'], 'clock': repr(localNode.counter | partner_vc)})
             # TODO tiebreaker based on server id + timestamp
             # elif :
+            elif
         # if vector clocks are equal, but the stored times are different, tiebreak
         if eval(entry.clock)[localNode.partition_id] == partner_vc[localNode.partition_id] and not entry.time == req.get(url_str).json()['time']:
             # if we are the stale value, update our key to partner's key
@@ -241,12 +242,13 @@ def payload_update(request):
 def bad_key_response(request, key):
     return Response(status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
 
+# tell your friends
 @api_view(['PUT'])
 def broadcast_put(request):
-
     merge = request.data
-    localNode.counter = localNode.counter | eval(merge['causal payload'])
+    localNode.counter = localNode.counter | eval(merge['clock'])
     create = KvsEntry.objects.update_or_create(key=key, defaults={'value': merge['value'], 'time': merge['time'], 'clock': localNode.counter.__str__()})
+    return Response(status=status.HTTP_200_OK)
 
 
 # handle correct keys
@@ -285,7 +287,6 @@ def kvs_response(request, key):
             for node in localNode.__partition_members():
                 try:
                     req.put('http://'+node.address+'/broadcast_put/', data = {'value': input_value, 'time': t, 'clock': localNode.counter.__str__()}})
-
                 except Exception:
                     pass
 
@@ -299,7 +300,6 @@ def kvs_response(request, key):
         # if GET, attempt to see if key exists, return found value or resulting error.
         elif method == 'GET':
 
-
             for node in localNode.__partition_members():
                 try:
                     cheq = req.get('http://'+node.address+ '/kvs/' + key)
@@ -307,6 +307,11 @@ def kvs_response(request, key):
                         if eval(cheq.json()['causal payload'])[localNode.partition_id()] > localNode.counter[localNode.partition_id()]:
                             localNode.counter = localNode.counter | eval(cheq.json()['causal payload'])
                             latest = KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json()['time'], 'clock': cheq.json()['causal payload']})
+                        if eval(cheq.json()['causal payload'])[localNode.partition_id()] == localNode.counter[localNode.partition_id()] and not KvsEntry.objects.get(key=key).key == cheq.json()['key']:
+                            # tiebreak and fix if they win tiebreak
+                            pass
+
+
                 except Exception:
                     pass
 
