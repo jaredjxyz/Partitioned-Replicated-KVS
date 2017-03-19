@@ -248,9 +248,21 @@ class Node(object):
 
 
     # have this Node find the successor of a given slot
-    def find_successor(self, key):
-        desired_node = self.find_predecessor(key)
-        return desired_node.successor()
+    def find_successors(self, key):
+        current_partition = self.partition_members()
+        found = False
+        while not found:
+            for node in current_partition:
+                try:
+                    if not node.is_mine(key):
+                        current_partition = node.successors()
+                        break
+                    else:
+                        found = True
+                        break
+                except ConnectionError:
+                    continue
+        return current_partition
 
     # have this Node find the predecessor of a given slot
     def find_predecessor(self, key):
