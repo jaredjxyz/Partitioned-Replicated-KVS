@@ -2,7 +2,6 @@ import sys
 import requests as req
 import os
 import random
-import copy
 from collections import Counter
 from requests.exceptions import ConnectionError
 
@@ -73,7 +72,7 @@ class Node(object):
 
     # query successor's ip so we can forward request
     def get_successor_ip(self):
-        return self.successor().address
+        return self.successors()[0].address
 
     def is_local(self):
         return self == localNode
@@ -237,20 +236,23 @@ class Node(object):
 
     # ######## Code for finding successor node of an identifier ######## #
 
-    def set_partition_id(self, partition_id):
-        """
-        Sets the partition ID of the node
-        """
-        if self.is_local():
-            self.__partition_id = partition_id
-        else:
-            send_partition_id(self.address, partition_id)
-
-
     # have this Node find the successor of a given slot
-    def find_successor(self, key):
-        desired_node = self.find_predecessor(key)
-        return desired_node.successor()
+    def find_successors(self, key):
+        current_partition = self.partition_members()
+        found = False
+        while not found:
+            for node in current_partition:
+                try:
+                    if not node.is_mine(key):
+                        current_partition = node.successors()
+                        break
+                    else:
+                        found = True
+                        break
+                except ConnectionError:
+                    continue
+        print >> sys.stderr, "The owner of key", key, "is", current_partition[0].partition_id()
+        return current_partition
 
     # have this Node find the predecessor of a given slot
     def find_predecessor(self, key):
@@ -320,8 +322,8 @@ class Node(object):
             # Find where we belong
             for group_size, node in group_numbers_and_sizes.values():
                 if node.is_mine(new_partition_number):
-                    my_successors = list(node.successors())
-                    my_predecessors = list(node.partition_members())
+                    my_successors = list(node.partition_members())
+                    my_predecessors = list(node.predecessors())
                     break
 
             for successor in my_successors:
@@ -458,7 +460,7 @@ def delete_partition_member(address, node):
 
 def get_partition_id(address):
     res = req.get('http://' + address + '/kvs',
-            params={'request': 'partition_id'})
+                  params={'request': 'partition_id'})
 
     return res.json()['partition_id']
 
