@@ -320,7 +320,25 @@ def view_change(request):
 # # get partition id
 @api_view(['GET'])
 def get_all_partition_ids(request):
-    return Response({'msg': 'zach has not done this yet'}, status=status.HTTP_404_NOT_FOUND)
+
+    successor_ip = localNode.get_successor_ip()
+    url_str = 'http://' + successor_ip + '/kvs/get_all_partition_ids'
+
+    if 'source' not in request.data:
+        list = []
+        list.extend([int(localNode.partition_id())])
+        res = req.get(url_str, data = {'source': localNode.partition_id(), 'partition_id_list': repr(list)})
+
+    if 'source' in request.data and int(request.data['source']) == localNode.partition_id():
+        return Response({'msg': 'success', 'partition_id_list': request.data['partition_id_list']})
+
+    if 'source' in request.data and int(request.data['source']) != localNode.partition_id():
+        list = eval(request.data['partition_id_list'])
+        list.extend([int(localNode.partition_id())])
+        res = req.get(url_str, data = {'source': request.data['source'], 'partition_id_list': repr(list)})
+
+    return Response(res.json(), status=status.HTTP_200_OK)
+
 
 
 # merge counters
