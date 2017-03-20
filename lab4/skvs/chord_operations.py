@@ -2,11 +2,16 @@ import sys
 import requests as req
 import os
 import random
+<<<<<<< HEAD
 import copy
 import time
 from time import sleep
+=======
+>>>>>>> master
 from collections import Counter
 from requests.exceptions import ConnectionError
+from time import sleep
+from threading import Thread
 
 KvsEntry = None
 # This can't be imported directly into here because of how Django works,
@@ -83,13 +88,26 @@ class Node(object):
     def is_remote(self):
         return self != localNode
 
-    # Run gossip in background randomly within an alright range of time
-    def run_gossip(self):
-        # TODO set up so gossip runs every few seconds as a thread. Move wait_time to be a fixed attribute elsewhere
-        # each node has a fixed amount of time it waits before issues gossip request to its partition members
-        wait_time = random.randint(5, len(self.__partition_members))
-        partner_node = random.choice(self.__partition_members)
-        req.put('http://' + partner_node + '/kvs/gossip', params={'request': 'gossip'}, data={'ip_port': self.address})
+    # ## Run gossip in background randomly within an alright range of time
+    def run_gossip(self, in_thread=False):
+        if self.is_local():
+            # If we're already in a separate thread, run gossip in this thread
+            if in_thread:
+                while True:
+                    # Wait between 0 and (# of partition members)*5 seconds
+                    wait_time = random.random() * len(self.partition_members()) * 5
+                    sleep(wait_time)
+
+                    # Tell a random other node in our partition to ask around
+                    partner_node = random.choice(self.__partition_members)
+                    req.put('http://' + partner_node.address + '/kvs/gossip', params={'request': 'gossip'}, data={'ip_port': self.address})
+
+            # If we're not already in a separate thread, create a new separate thread and run it
+            else:
+                gossipThread = Thread(target=self.run_gossip, kwargs={'in_thread': True})
+                gossipThread.start()
+        else:
+            run_gossip(self.address)
 
     # Code for getting and setting successor and predecessor.
     # Use these for setting and getting, do NOT use the assignment operation on __successor or __predecessor
@@ -239,20 +257,22 @@ class Node(object):
 
     # ######## Code for finding successor node of an identifier ######## #
 
-    def set_partition_id(self, partition_id):
-        """
-        Sets the partition ID of the node
-        """
-        if self.is_local():
-            self.__partition_id = partition_id
-        else:
-            send_partition_id(self.address, partition_id)
-
-
     # have this Node find the successor of a given slot
-    def find_successor(self, key):
-        desired_node = self.find_predecessor(key)
-        return desired_node.successor()
+    def find_successors(self, key):
+        current_partition = self.partition_members()
+        found = False
+        while not found:
+            for node in current_partition:
+                try:
+                    if not node.is_mine(key):
+                        current_partition = node.successors()
+                        break
+                    else:
+                        found = True
+                        break
+                except ConnectionError:
+                    continue
+        return current_partition
 
     # have this Node find the predecessor of a given slot
     def find_predecessor(self, key):
@@ -278,7 +298,6 @@ class Node(object):
         group_numbers_and_sizes = {self.partition_id(): (len(self.partition_members()), self)}
         current_group = self.successors()
 
-        print >> sys.stderr, "Got successors"
         # Get a list of partition numbers and their sizes and their representative nodes
         while not any(self.address == node.address for node in current_group):  # While I'm not in the successors list
             for node in current_group:
@@ -322,8 +341,8 @@ class Node(object):
             # Find where we belong
             for group_size, node in group_numbers_and_sizes.values():
                 if node.is_mine(new_partition_number):
-                    my_successors = list(node.successors())
-                    my_predecessors = list(node.partition_members())
+                    my_successors = list(node.partition_members())
+                    my_predecessors = list(node.predecessors())
                     break
 
             for successor in my_successors:
@@ -333,23 +352,26 @@ class Node(object):
 
             for predecessor in my_predecessors:
                 for successor in my_successors:
-                    print >> sys.stderr, successor, my_successors
                     predecessor.remove_successor(successor)
-                    print >> sys.stderr, successor, my_successors
                 predecessor.set_successor(new_node)
 
             new_node.set_successors(my_successors)
             new_node.set_predecessors(my_predecessors)
             new_node.set_partition_member(new_node)
 
+        # Stick notify here
+        self.notify(new_node)
+        new_node.run_gossip()
+
     # new_node may be our predecessor
+    # TODO: Get this working and add it to the end of join, as well as other key migrations
     def notify(self, new_node):
         """
         Sets our predecessor to be the given node
         Checks if we have any entries that belong to our predecessor and, if so, sends them along.
         """
         if self.is_local():
-            predecessor = self.predecessor()
+            predecessor = list(self.predecessors())[0]
             for entry in KvsEntry.objects.all():
                 if not self.is_mine(entry.key):
                     self.sendKVSEntry(predecessor, entry.key, entry.value)
@@ -396,7 +418,6 @@ def get_partition_members(address):
     """
     res = req.get('http://' + address + '/kvs', params={'request': 'partition_members'})
     # Partition members come in as a list of dicts
-    print >> sys.stderr, res.text
     partition_members = res.json()
     return map(lambda params: Node(**params), partition_members)
 
@@ -462,7 +483,7 @@ def get_partition_id(address):
     print >> sys.stderr, "CALLING GET_PARTITION_ID"
     sleep(1)
     res = req.get('http://' + address + '/kvs',
-            params={'request': 'partition_id'})
+                  params={'request': 'partition_id'})
 
     return res.json()['partition_id']
 
@@ -490,6 +511,14 @@ def notify(address, node):
     req.post('http://' + address + '/kvs',
              params={'request': 'notify'},
              data={'ip_port': node.address})
+
+
+def run_gossip(address):
+    """
+    Tells address to start gossipping
+    """
+    req.post('http://' + address + '/kvs',
+             params={'request': 'run_gossip'})
 
 
 def ask_ready(address):
