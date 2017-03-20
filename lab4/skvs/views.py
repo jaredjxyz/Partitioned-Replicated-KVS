@@ -7,24 +7,27 @@ import sys
 import time
 from time import sleep
 from sys import stderr
-from collections import Counter  # Don't listen to the linter he LIES and tells you we're not using this. Bad linter. No.
+from collections import \
+    Counter  # Don't listen to the linter he LIES and tells you we're not using this. Bad linter. No.
 from chord_operations import localNode, Node
+
 
 @api_view(['GET', 'POST', 'DELETE'])
 def get_partition_id(request):
     if request.method == 'GET':
         return Response({'msg': 'success',
-                          'partition_id': localNode.partition_id()})
+                         'partition_id': localNode.partition_id()})
     else:
         return Response({'msg': 'error',
                          'error': 'only GET requests can obtain partition id'},
-                         status=status.HTTP_400_BAD_REQUEST)
+                        status=status.HTTP_400_BAD_REQUEST)
+
 
 @api_view(['GET', 'POST', 'DELETE'])
 def get_partition_members(request):
     if request.method == 'GET':
         requested_id = int(request.data.get('partition_id'))
-        
+
         if requested_id:
             if localNode.partition_id() == requested_id:
                 members = [node.address for node in localNode.partition_members()]
@@ -37,9 +40,11 @@ def get_partition_members(request):
                         data={'partition_id': requested_id})
         else:
             return Response({'msg': 'error', 'error': 'invalid partition id'},
-                             status=status.HTTP_400_BAD_REQUEST)
+                            status=status.HTTP_400_BAD_REQUEST)
     else:
-        return Response({'msg': 'error', 'error': 'only GET requests can obtain partition id'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'msg': 'error', 'error': 'only GET requests can obtain partition id'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
 
 @api_view(['GET', 'POST', 'DELETE'])
 def gossip(request):
@@ -56,16 +61,27 @@ def gossip(request):
             localNode.counter = localNode.counter | partner_vc
             # update our key if it is the stale one
             if partner_vc[localNode.partition_id()] > temp[localNode.partition_id()]:
-                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'], 'time': req.get(url_str).json()['time'], 'clock': repr(localNode.counter | partner_vc)})
+                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'],
+                                                                           'time': req.get(url_str).json()['time'],
+                                                                           'clock': repr(
+                                                                               localNode.counter | partner_vc)})
             # TODO tiebreaker based on server id + timestamp
             # elif : partner wins the tiebreak
-            elif str(partner_ip_port) + str(req.get(url_str).json()['time']) > str(localNode.address) + str(KvsEntry.objects.get(key=entry.key).time):
-                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'], 'time': req.get(url_str).json()['time'], 'clock': repr(localNode.counter | partner_vc)})
+            elif str(partner_ip_port) + str(req.get(url_str).json()['time']) > str(localNode.address) + str(
+                    KvsEntry.objects.get(key=entry.key).time):
+                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'],
+                                                                           'time': req.get(url_str).json()['time'],
+                                                                           'clock': repr(
+                                                                               localNode.counter | partner_vc)})
         # if vector clocks are equal, but the stored times are different, tiebreak
-        if eval(entry.clock)[localNode.partition_id()] == partner_vc[localNode.partition_id()] and not entry.time == req.get(url_str).json()['time']:
+        if eval(entry.clock)[localNode.partition_id()] == partner_vc[localNode.partition_id()] and not entry.time == \
+                req.get(url_str).json()['time']:
             # if we are the stale value, update our key to partner's key
             if entry.time < req.get(url_str).json()['time']:
-                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'], 'time': req.get(url_str).json()['time'], 'clock': repr(localNode.counter | partner_vc)})
+                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'],
+                                                                           'time': req.get(url_str).json()['time'],
+                                                                           'clock': repr(
+                                                                               localNode.counter | partner_vc)})
 
 
 @api_view(['GET', 'POST', 'DELETE'])
@@ -96,7 +112,7 @@ def process_remote(request):
                 correct_successors = localNode.successors()
                 return Response([{'address': node.address,
                                   'partition_id': node.partition_id()}
-                                for node in correct_successors])
+                                 for node in correct_successors])
 
         # Get our predecessors
         elif request.query_params.get('request') == 'predecessors':
@@ -139,7 +155,6 @@ def process_remote(request):
         if request.query_params.get('request') == 'successor':
             successor_ip = request.data.get('ip_port')
             if successor_ip:
-
                 localNode.set_successor(Node(successor_ip))
                 return Response({'msg': 'success'})
 
@@ -229,18 +244,20 @@ def view_change(request):
             # except Exception:
             #     return Response(status=status.HTTP_400_BAD_REQUEST)
 
-        # TODO: Get Remove working.
+        # TODO: Test Remove!
         elif change_type == 'remove':
             # if we are the node that is going to be removed
             if ip_port == localNode.address:
                 # check if we will still have others in our partition after our deletion
                 if localNode.partition_members() > 1:
-                    # if so, then delete all our entries TODO we could optionally perform gossip before this, too
+                    # if so, then delete all our entries after performing gossip
+                    partner_node = localNode.successors()[0].address
+                    req.put('http://' + partner_node + '/kvs/gossip', params={'request': 'gossip'},
+                            data={'ip_port': localNode.address})
                     for entry in KvsEntry.objects.all():
                         KvsEntry.objects.get(key=entry.key).delete()
                 else:
                     # otherwise, we must alter succ/pred relationships, then migrate our keys
-
                     # set this node's successors' predecessors to the node's predecessors
                     for node in localNode.successors():
                         for pred_node in localNode.predecessors():
@@ -281,25 +298,26 @@ def view_change(request):
     return Response({'msg': 'Error: No IP_PORT'}, status=status.HTTP_400_BAD_REQUEST)
 
 
-#get partition id
-@api_view(['GET'])
-def get_partition_id(request):
-    try:
-        return Response({"msg": "success", "partition_id": localNode.partition_id()}, status=status.HTTP_200_OK)
-    except Exception:
-        return Response({"msg": "error", "error": "zach biffed this"}, status=status.HTTP_404_NOT_FOUND)
+# get partition id
+# @api_view(['GET'])
+# def get_partition_id(request):
+#     try:
+#         return Response({"msg": "success", "partition_id": localNode.partition_id()}, status=status.HTTP_200_OK)
+#     except Exception:
+#         return Response({"msg": "error", "error": "zach biffed this"}, status=status.HTTP_404_NOT_FOUND)
 
 
-#get partition id
-@api_view(['GET'])
-def get_partition_members(request):
-try:
-    return Response({"msg": "success", "partition_id": list(localNode.partition_members())}, status=status.HTTP_200_OK)
-except Exception:
-    return Response({"msg": "error", "error": "zach biffed this"}, status=status.HTTP_404_NOT_FOUND)
-
-
-#get partition id
+# # get partition id
+# @api_view(['GET'])
+# def get_partition_members(request):
+#     try:
+#         return Response({"msg": "success", "partition_id": list(localNode.partition_members())},
+#                         status=status.HTTP_200_OK)
+#     except Exception:
+#         return Response({"msg": "error", "error": "zach biffed this"}, status=status.HTTP_404_NOT_FOUND)
+#
+#
+# # get partition id
 @api_view(['GET'])
 def get_all_partition_ids(request):
     return Response({'msg': 'zach has not done this yet'}, status=status.HTTP_404_NOT_FOUND)
@@ -323,7 +341,8 @@ def bad_key_response(request, key):
 def broadcast_put(request):
     merge = request.data
     localNode.counter = localNode.counter | eval(merge['clock'])
-    KvsEntry.objects.update_or_create(key=merge['key'], defaults={'value': merge['value'], 'time': merge['time'], 'clock': repr(localNode.counter)})
+    KvsEntry.objects.update_or_create(key=merge['key'], defaults={'value': merge['value'], 'time': merge['time'],
+                                                                  'clock': repr(localNode.counter)})
     return Response(status=status.HTTP_200_OK)
 
 
@@ -331,11 +350,15 @@ def broadcast_put(request):
 def get_simple(request):
     try:
         desired_entry = KvsEntry.objects.get(key=request.data['key'])
-        return Response({'msg': 'success', 'key': desired_entry.key, 'value': desired_entry.value, 'source': 'get_simple', 'owner': localNode.address, 'time': desired_entry.time, 'clock': desired_entry.clock},
-                        status=status.HTTP_200_OK)
+        return Response(
+            {'msg': 'success', 'key': desired_entry.key, 'value': desired_entry.value, 'source': 'get_simple',
+             'owner': localNode.address, 'time': desired_entry.time, 'clock': desired_entry.clock},
+            status=status.HTTP_200_OK)
     except Exception:
         expectedOwner = localNode.find_successors(request.data['key'])[0]
-        return Response({'msg': 'error', 'error': 'key does not exist', 'source': 'get_simple', 'owner': expectedOwner.address}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {'msg': 'error', 'error': 'key does not exist', 'source': 'get_simple', 'owner': expectedOwner.address},
+            status=status.HTTP_404_NOT_FOUND)
 
 
 # handle correct keys
@@ -359,28 +382,33 @@ def kvs_response(request, key):
             input_value = request.data['val']
             #   must be that value > 256MB
             if sys.getsizeof(input_value) > 1024 * 1024 * 256:
-                return Response({'msg': 'error', 'error': 'Size of key too big'}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+                return Response({'msg': 'error', 'error': 'Size of key too big'},
+                                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
 
             # get timestamp and counter
             t = float("{0:.2f}".format(time.time()))  # jared magic
             localNode.counter[localNode.partition_id()] += 1
 
             # If object with that key does not exist, it will be created. If it does exist, value will be updated.
-            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
+            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t,
+                                                                                'clock': repr(localNode.counter)})
 
             for node in localNode.partition_members():
                 try:
-                    req.put('http://' + node.address + '/broadcast_put/', data={'key': key, 'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
+                    req.put('http://' + node.address + '/broadcast_put/',
+                            data={'key': key, 'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
                     print >> sys.stderr, 'broadcast success?'
                 except Exception:
                     print >> sys.stderr, 'broadcast put fail'
                     pass
 
             if created:
-                return Response({'replaced': 0, 'msg': 'success', 'partition_id': localNode.partition_id(), 'time': t, 'causal_payload': repr(localNode.counter)},
+                return Response({'replaced': 0, 'msg': 'success', 'partition_id': localNode.partition_id(), 'time': t,
+                                 'causal_payload': repr(localNode.counter)},
                                 status=status.HTTP_201_CREATED)
             else:
-                return Response({'replaced': 1, 'msg': 'success', 'partition_id': localNode.partition_id(), 'time': t, 'causal_payload': repr(localNode.counter)},
+                return Response({'replaced': 1, 'msg': 'success', 'partition_id': localNode.partition_id(), 'time': t,
+                                 'causal_payload': repr(localNode.counter)},
                                 status=status.HTTP_200_OK)
 
         # if GET, attempt to see if key exists, return found value or resulting error.
@@ -393,17 +421,24 @@ def kvs_response(request, key):
                     if 'clock' in cheq.json():
 
                         # if the poll returns a vector clock sooner than our own
-                        if eval(cheq.json()['clock'])[localNode.partition_id()] > localNode.counter[localNode.partition_id()]:
+                        if eval(cheq.json()['clock'])[localNode.partition_id()] > localNode.counter[
+                            localNode.partition_id()]:
                             # merge clocks together
                             localNode.counter = localNode.counter | eval(cheq.json()['clock'])
                             # update keys to value with more recent clock
-                            KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json()['time'], 'clock': cheq.json()['clock']})
+                            KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'],
+                                                                                 'time': cheq.json()['time'],
+                                                                                 'clock': cheq.json()['clock']})
 
-                        if eval(cheq.json()['clock'])[localNode.partition_id()] == localNode.counter[localNode.partition_id()] and not KvsEntry.objects.get(key=key).key == cheq.json()['key']:
+                        if eval(cheq.json()['clock'])[localNode.partition_id()] == localNode.counter[
+                            localNode.partition_id()] and not KvsEntry.objects.get(key=key).key == cheq.json()['key']:
                             # tiebreak and fix if they win tiebreak
-                            if str(node.address) + (cheq.json()['time']) > str(localNode.address) + str(KvsEntry.objects.get(key=key).time):
-                                KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'], 'time': cheq.json()['time'], 'clock': cheq.json()['clock']})
-                            # pass
+                            if str(node.address) + (cheq.json()['time']) > str(localNode.address) + str(
+                                    KvsEntry.objects.get(key=key).time):
+                                KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'],
+                                                                                     'time': cheq.json()['time'],
+                                                                                     'clock': cheq.json()['clock']})
+                                # pass
 
                 except Exception:
                     print >> sys.stderr, "get poll fail"
@@ -411,11 +446,15 @@ def kvs_response(request, key):
 
             try:
                 desired_entry = KvsEntry.objects.get(key=key)
-                return Response({'msg': 'success', 'value': desired_entry.value, 'partition_id': localNode.partition_id(), 'time': desired_entry.time, 'causal_payload': desired_entry.clock},
-                                status=status.HTTP_200_OK)
+                return Response(
+                    {'msg': 'success', 'value': desired_entry.value, 'partition_id': localNode.partition_id(),
+                     'time': desired_entry.time, 'causal_payload': desired_entry.clock},
+                    status=status.HTTP_200_OK)
             except KvsEntry.DoesNotExist:
                 expectedOwner = localNode.find_successors(key)[0]
-                return Response({'msg': 'error', 'error': 'key does not exist', 'partition_id': expectedOwner.partition_id()}, status=status.HTTP_404_NOT_FOUND)
+                return Response(
+                    {'msg': 'error', 'error': 'key does not exist', 'partition_id': expectedOwner.partition_id()},
+                    status=status.HTTP_404_NOT_FOUND)
 
     # if it was not ours, we must forward the query to our successor
     else:

@@ -2,12 +2,9 @@ import sys
 import requests as req
 import os
 import random
-<<<<<<< HEAD
 import copy
 import time
 from time import sleep
-=======
->>>>>>> master
 from collections import Counter
 from requests.exceptions import ConnectionError
 from time import sleep
@@ -364,7 +361,7 @@ class Node(object):
         new_node.run_gossip()
 
     # new_node may be our predecessor
-    # TODO: Get this working and add it to the end of join, as well as other key migrations
+    # TODO: Test notify
     def notify(self, new_node):
         """
         Sets our predecessor to be the given node
