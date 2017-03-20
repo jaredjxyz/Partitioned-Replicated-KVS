@@ -295,7 +295,7 @@ def connect_node(node, network, sudo):
     time.sleep(0.5)
 
 if __name__ == "__main__":
-    container_name = 'kvss'
+    container_name = 'kvs'
     hostname = 'localhost'
     network = 'mynet'
     sudo = 'sudo'

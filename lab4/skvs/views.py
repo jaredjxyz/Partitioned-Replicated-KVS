@@ -200,7 +200,14 @@ def view_change(request):
         elif change_type == 'remove':
             # if we are the node that is going to be removed
             if ip_port == localNode.address:
-
+                # check if we will still have others in our partition after our deletion
+                if localNode.partition_members() > 1:
+                    # if so, then delete all our entries TODO we could optionally perform gossip before this, too
+                    for entry in KvsEntry.objects.all():
+                        KvsEntry.objects.get(key=entry.key).delete()
+                else:
+                    # we must migrate our keys to our successor
+                    
                 # set the node's successor's predecessor to the node's predecessor
                 localNode.successor().set_predecessor(localNode.predecessor())
                 # set the node's predecessor's successor to the node's successor
@@ -216,7 +223,7 @@ def view_change(request):
                     res = req.put(url_str, data={'val': val})
 
                     if res.status_code == status.HTTP_200_OK or res.status_code == status.HTTP_201_CREATED:
-                        KvsEntry.objects.get(key=key).delete()
+
                     else:
                         return Response(res.json(), status=res.status_code)
 
