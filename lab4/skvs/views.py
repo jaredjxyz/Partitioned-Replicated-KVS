@@ -223,13 +223,14 @@ def view_change(request):
                         key = kvs_entry.key
                         val = kvs_entry.value
 
-                        for succ_node in localNode.successors():
-                            url_str = 'http://' + succ_node.address + '/kvs/' + str(key)
-                            res = req.put(url_str, data={'val': val})
-                            if res.status_code == status.HTTP_200_OK or res.status_code == status.HTTP_201_CREATED:
-                                pass
-                            else:
-                                return Response(res.json(), status=res.status_code)
+                        url_str = 'http://' + localNode.successors()[0].address + '/kvs/' + str(key)
+
+                        res = req.put(url_str, data={'val': val})
+
+                        if res.status_code == status.HTTP_200_OK or res.status_code == status.HTTP_201_CREATED:
+                            pass
+                        else:
+                            return Response(res.json(), status=res.status_code)
 
                     # then set doomed node predecessor and successor to None
                     localNode.set_predecessor(None)
