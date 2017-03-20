@@ -21,21 +21,21 @@ def get_partition_members(request):
     requested_id = int(request.data.get('partition_id'))
     if requested_id != None:
 
-        if 'source' in request.data:
-            print >> sys.stderr, "Cycled back on itself!"
-            sleep(2)
-            if int(request.data.get('source')) == localNode.partition_id():
+        if 'source' in request.data and int(request.data.get('source')) == localNode.partition_id():
                 return Response({'msg': 'error', 'error': 'partition id does not exist'},
                                  status=status.HTTP_400_BAD_REQUEST)
 
         if localNode.partition_id() == requested_id:
             members = [node.address for node in localNode.partition_members()]
             return Response({'msg': 'success',
-                             'partition_members': members})
+                             'partition_members': members}, status=status.HTTP_200_OK)
         else:
             successor_ip = localNode.get_successor_ip()
-            req.get('http://' + successor_ip + '/kvs/get_partition_members',
+            res = req.get('http://' + successor_ip + '/kvs/get_partition_members',
                     data={'partition_id': requested_id, 'source': int(localNode.partition_id())})
+
+        return Response(res.json())
+
     else:
         return Response({'msg': 'error', 'error': 'invalid partition id'},
                          status=status.HTTP_400_BAD_REQUEST)
