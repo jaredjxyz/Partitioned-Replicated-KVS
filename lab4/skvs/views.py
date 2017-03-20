@@ -271,6 +271,30 @@ def view_change(request):
     return Response({'msg': 'Error: No IP_PORT'}, status=status.HTTP_400_BAD_REQUEST)
 
 
+#get partition id
+@api_view(['GET'])
+def get_partition_id(request):
+    try:
+        return Response({"msg": "success", "partition_id": localNode.partition_id()}, status=status.HTTP_200_OK)
+    except Exception:
+        return Response({"msg": "error", "error": "zach biffed this"}, status=status.HTTP_404_NOT_FOUND)
+
+
+#get partition id
+@api_view(['GET'])
+def get_partition_members(request):
+try:
+    return Response({"msg": "success", "partition_id": list(localNode.partition_members())}, status=status.HTTP_200_OK)
+except Exception:
+    return Response({"msg": "error", "error": "zach biffed this"}, status=status.HTTP_404_NOT_FOUND)
+
+
+#get partition id
+@api_view(['GET'])
+def get_all_partition_ids(request):
+    return Response({'msg': 'zach has not done this yet'}, status=status.HTTP_404_NOT_FOUND)
+
+
 # merge counters
 @api_view(['PUT'])
 def payload_update(request):
