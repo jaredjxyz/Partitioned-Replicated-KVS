@@ -11,40 +11,35 @@ from collections import \
     Counter  # Don't listen to the linter he LIES and tells you we're not using this. Bad linter. No.
 from chord_operations import localNode, Node
 
-
-@api_view(['GET', 'POST', 'DELETE'])
+@api_view(['GET'])
 def get_partition_id(request):
-    if request.method == 'GET':
         return Response({'msg': 'success',
-                         'partition_id': localNode.partition_id()})
+                          'partition_id': localNode.partition_id()})
+
+@api_view(['GET'])
+def get_partition_members(request):
+    requested_id = int(request.data.get('partition_id'))
+    if requested_id:
+        if localNode.partition_id() == requested_id:
+            members = [node.address for node in localNode.partition_members()]
+            return Response({'msg': 'success',
+                             'partition_members': members})
+        else:
+            successor_ip = localNode.get_successor_ip()
+            req.get('http://' + successor_ip + '/kvs/get_partition_members',
+                    data={'partition_id': requested_id})
+    else:
+        return Response({'msg': 'error', 'error': 'invalid partition id'},
+                         status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+def get_all_partition_ids(request)
+    if request.method == 'GET':
+        # Do the shits
     else:
         return Response({'msg': 'error',
-                         'error': 'only GET requests can obtain partition id'},
-                        status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['GET', 'POST', 'DELETE'])
-def get_partition_members(request):
-    if request.method == 'GET':
-        requested_id = int(request.data.get('partition_id'))
-
-        if requested_id:
-            if localNode.partition_id() == requested_id:
-                members = [node.address for node in localNode.partition_members()]
-                return Response({'msg': 'success',
-                                 'partition_members': members})
-
-            else:
-                successor_ip = localNode.get_successor_ip()
-                req.get('http://' + successor_ip + '/kvs/get_partition_members',
-                        data={'partition_id': requested_id})
-        else:
-            return Response({'msg': 'error', 'error': 'invalid partition id'},
-                            status=status.HTTP_400_BAD_REQUEST)
-    else:
-        return Response({'msg': 'error', 'error': 'only GET requests can obtain partition id'},
-                        status=status.HTTP_400_BAD_REQUEST)
-
+                         'error': 'only GET requests can obtain all partition ids'},
+                         status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET', 'POST', 'DELETE'])
 def gossip(request):
@@ -297,27 +292,6 @@ def view_change(request):
 
     return Response({'msg': 'Error: No IP_PORT'}, status=status.HTTP_400_BAD_REQUEST)
 
-
-# get partition id
-# @api_view(['GET'])
-# def get_partition_id(request):
-#     try:
-#         return Response({"msg": "success", "partition_id": localNode.partition_id()}, status=status.HTTP_200_OK)
-#     except Exception:
-#         return Response({"msg": "error", "error": "zach biffed this"}, status=status.HTTP_404_NOT_FOUND)
-
-
-# # get partition id
-# @api_view(['GET'])
-# def get_partition_members(request):
-#     try:
-#         return Response({"msg": "success", "partition_id": list(localNode.partition_members())},
-#                         status=status.HTTP_200_OK)
-#     except Exception:
-#         return Response({"msg": "error", "error": "zach biffed this"}, status=status.HTTP_404_NOT_FOUND)
-#
-#
-# # get partition id
 @api_view(['GET'])
 def get_all_partition_ids(request):
 
@@ -340,19 +314,15 @@ def get_all_partition_ids(request):
     return Response(res.json(), status=status.HTTP_200_OK)
 
 
-
-# merge counters
 @api_view(['PUT'])
 def payload_update(request):
     localNode.counter = localNode.counter | eval(request.data['load'])
     return Response(status=status.HTTP_200_OK)
 
-
 # handle incorrect keys
 @api_view(['GET', 'PUT', 'DELETE'])
 def bad_key_response(request, key):
     return Response(status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
-
 
 # tell your friends
 @api_view(['PUT'])
@@ -385,7 +355,6 @@ def kvs_response(request, key):
     """
     Key comes in guaranteed to be r'[a-zA-Z0-9_]' between 1 and 250 characters thanks to the magic of regex and urls.py
     """
-    print >> sys.stderr, "Calling kvs_response!"
     method = request.method
 
     # if we are the main instance, retrieve requested data
