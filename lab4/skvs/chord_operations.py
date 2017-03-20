@@ -2,6 +2,12 @@ import sys
 import requests as req
 import os
 import random
+<<<<<<< HEAD
+import copy
+import time
+from time import sleep
+=======
+>>>>>>> master
 from collections import Counter
 from requests.exceptions import ConnectionError
 from time import sleep
@@ -34,7 +40,7 @@ def in_range(c, a, b):
     return a <= c or c < b
 
 
-# ## This is initialized at Django startup (see apps.py)
+# This is initialized at Django startup (see apps.py)
 localNode = None
 
 
@@ -103,8 +109,8 @@ class Node(object):
         else:
             run_gossip(self.address)
 
-    # ## Code for getting and setting successor and predecessor.
-    # ## Use these for setting and getting, do NOT use the assignment operation on __successor or __predecessor
+    # Code for getting and setting successor and predecessor.
+    # Use these for setting and getting, do NOT use the assignment operation on __successor or __predecessor
 
     def successors(self):
         """
@@ -474,6 +480,8 @@ def delete_partition_member(address, node):
 
 
 def get_partition_id(address):
+    print >> sys.stderr, "CALLING GET_PARTITION_ID"
+    sleep(1)
     res = req.get('http://' + address + '/kvs',
                   params={'request': 'partition_id'})
 
@@ -523,5 +531,4 @@ def ask_ready(address):
 
     except ConnectionError:
         return None
-
     return res.json()['msg']

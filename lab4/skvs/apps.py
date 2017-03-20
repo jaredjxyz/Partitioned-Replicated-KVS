@@ -15,12 +15,13 @@ class SkvsConfig(AppConfig):
     name = 'skvs'
 
     def ready(self):
+        print >> sys.stderr, "Getting Django ready!"
         # Import kvsentry into chord operations
         from models import KvsEntry
         chord_operations.KvsEntry = KvsEntry
 
         myIP = os.environ.get('IPPORT')
-        print >> sys.stderr, myIP
+        print >> sys.stderr, "This is my IP: ", myIP
 
         # Checks for the case when Django's second thread starts up
         # We have to do this because of how Django's auto-load works
@@ -36,10 +37,12 @@ class SkvsConfig(AppConfig):
                 partition_size = int(os.environ['K'])
                 num_partitions = int(math.ceil(float(len(addresses)) / partition_size))
 
+                print >> sys.stderr, "Number of partitions is: ", num_partitions
+
                 # Create empty buckets for each partition and fill them up
                 partitions = [[] for i in range(num_partitions)]
                 partition_number = 0
-                print >> sys.stderr, len(partitions)
+
                 for address in sorted(addresses):
                     partitions[partition_number].append(address)
 
@@ -47,6 +50,7 @@ class SkvsConfig(AppConfig):
                     if address == myIP:
                         my_partition_number = partition_number
 
+                    # If the current partition is full, increment the partition_number
                     if len(partitions[partition_number]) == partition_size:
                         partition_number += 1
 
@@ -83,7 +87,6 @@ class SkvsConfig(AppConfig):
                 readyThread = Thread(target=getReady, args=[addresses])
                 readyThread.start()
 
-
 def getReady(addresses):
     while True:
         sleep(1)
@@ -92,6 +95,3 @@ def getReady(addresses):
             chord_operations.localNode.ready = True
             chord_operations.localNode.run_gossip()
             return
-
-
-

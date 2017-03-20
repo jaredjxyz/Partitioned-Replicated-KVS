@@ -5,9 +5,43 @@ from skvs.models import KvsEntry
 import requests as req
 import sys
 import time
+from time import sleep
+from sys import stderr
 from collections import Counter  # Don't listen to the linter he LIES and tells you we're not using this. Bad linter. No.
 from chord_operations import localNode, Node
 
+@api_view(['GET', 'POST', 'DELETE'])
+def get_partition_id(request):
+    if request.method == 'GET':
+        return Response({'msg': 'success',
+                          'partition_id': localNode.partition_id()})
+    else:
+        return Response({'msg': 'error',
+                         'error': 'only GET requests can obtain partition id'},
+                         status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET', 'POST', 'DELETE'])
+def get_partition_members(request):
+    if request.method == 'GET':
+        requested_id = int(request.data.get('partition_id'))
+        
+            if requested_id:
+                if localNode.partition_id() == requested_id:
+                    members = [node.address for node in localNode.partition_members()]
+                    return Response({'msg': 'success',
+                                     'partition_members': members})
+
+                else:
+                    successor_ip = localNode.get_successor_ip()
+                    req.get('http://' + successor_ip + '/kvs/get_partition_members',
+                            data={'partition_id': requested_id})
+            else:
+                return Response({'msg': 'error', 'error': 'invalid partition id'},
+                                 status=status.HTTP_400_BAD_REQUEST)
+    else:
+        return Response({'msg': 'error',
+                         'error': 'only GET requests can obtain partition id'},
+                         status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET', 'POST', 'DELETE'])
 def gossip(request):
@@ -52,6 +86,7 @@ def process_remote(request):
 
     if request.method == 'GET':
         # Get our successors
+
         if request.query_params.get('request') == 'successors':
             find_address = request.data.get('ip_port')
             # If data has an ip and port, return the successor of that ip and port
@@ -90,6 +125,7 @@ def process_remote(request):
 
         elif request.query_params.get('request') == 'ready':
             return Response({'msg': localNode.ready})
+
         # Use this for any arbitrary test you may want to run
         elif request.query_params.get('request') == 'test':
             node = localNode.partition_members()[1]
@@ -98,7 +134,6 @@ def process_remote(request):
             print >> sys.stderr, node.partition_members()
             node.remove_partition_member(Node('10.0.0.0'))
             print >> sys.stderr, 'Removed', node.partition_members()
-
             return Response({'msg': 'success'})
 
     elif request.method == 'POST':
@@ -248,6 +283,30 @@ def view_change(request):
     return Response({'msg': 'Error: No IP_PORT'}, status=status.HTTP_400_BAD_REQUEST)
 
 
+#get partition id
+@api_view(['GET'])
+def get_partition_id(request):
+    try:
+        return Response({"msg": "success", "partition_id": localNode.partition_id()}, status=status.HTTP_200_OK)
+    except Exception:
+        return Response({"msg": "error", "error": "zach biffed this"}, status=status.HTTP_404_NOT_FOUND)
+
+
+#get partition id
+@api_view(['GET'])
+def get_partition_members(request):
+try:
+    return Response({"msg": "success", "partition_id": list(localNode.partition_members())}, status=status.HTTP_200_OK)
+except Exception:
+    return Response({"msg": "error", "error": "zach biffed this"}, status=status.HTTP_404_NOT_FOUND)
+
+
+#get partition id
+@api_view(['GET'])
+def get_all_partition_ids(request):
+    return Response({'msg': 'zach has not done this yet'}, status=status.HTTP_404_NOT_FOUND)
+
+
 # merge counters
 @api_view(['PUT'])
 def payload_update(request):
@@ -287,6 +346,7 @@ def kvs_response(request, key):
     """
     Key comes in guaranteed to be r'[a-zA-Z0-9_]' between 1 and 250 characters thanks to the magic of regex and urls.py
     """
+    print >> sys.stderr, "Calling kvs_response!"
     method = request.method
 
     # if we are the main instance, retrieve requested data
