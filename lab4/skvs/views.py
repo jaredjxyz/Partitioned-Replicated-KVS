@@ -206,32 +206,37 @@ def view_change(request):
                     for entry in KvsEntry.objects.all():
                         KvsEntry.objects.get(key=entry.key).delete()
                 else:
-                    # we must migrate our keys to our successor
-                    
-                # set the node's successor's predecessor to the node's predecessor
-                localNode.successor().set_predecessor(localNode.predecessor())
-                # set the node's predecessor's successor to the node's successor
-                localNode.predecessor().set_successor(localNode.successor())
+                    # otherwise, we must alter succ/pred relationships, then migrate our keys
 
-                # migrate the key-values
-                for kvs_entry in KvsEntry.objects.all():
-                    key = kvs_entry.key
-                    val = kvs_entry.value
+                    # set this node's successors' predecessors to the node's predecessors
+                    for node in localNode.successors():
+                        for pred_node in localNode.predecessors():
+                            node.set_predecessor(pred_node)
 
-                    url_str = 'http://' + localNode.successor().address + '/kvs/' + str(key)
+                    # set the node's predecessors' successors to the node's successors
+                    for pred_node in localNode.predecessors():
+                        for succ_node in localNode.successors():
+                            pred_node.set_successor(succ_node)
 
-                    res = req.put(url_str, data={'val': val})
+                    # migrate the key-values
+                    for kvs_entry in KvsEntry.objects.all():
+                        key = kvs_entry.key
+                        val = kvs_entry.value
 
-                    if res.status_code == status.HTTP_200_OK or res.status_code == status.HTTP_201_CREATED:
+                        url_str = 'http://' + localNode.successor().address + '/kvs/' + str(key)
 
-                    else:
-                        return Response(res.json(), status=res.status_code)
+                        res = req.put(url_str, data={'val': val})
 
-                # then set doomed node predecessor and successor to None
-                localNode.set_predecessor(None)
-                localNode.set_successor(None)
+                        if res.status_code == status.HTTP_200_OK or res.status_code == status.HTTP_201_CREATED:
 
-                return Response({'msg': 'success'}, status=status.HTTP_200_OK)
+                        else:
+                            return Response(res.json(), status=res.status_code)
+
+                    # then set doomed node predecessor and successor to None
+                    localNode.set_predecessor(None)
+                    localNode.set_successor(None)
+
+                    return Response({'msg': 'success'}, status=status.HTTP_200_OK)
 
             # if instead, we are not the node to be removed, forward the remove_node request to the doomed node
             else:
