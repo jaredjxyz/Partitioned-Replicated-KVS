@@ -372,14 +372,14 @@ def kvs_response(request, key):
             obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t,
                                                                                 'clock': repr(localNode.counter)})
 
-            for node in localNode.partition_members():
-                try:
-                    req.put('http://' + node.address + '/broadcast_put/',
-                            data={'key': key, 'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
-                    print >> sys.stderr, 'broadcast success?'
-                except Exception:
-                    print >> sys.stderr, 'broadcast put fail'
-                    pass
+            #for node in localNode.partition_members():
+            try:
+                req.put('http://' + localNode.partition_members()[0] + '/broadcast_put/',
+                        data={'key': key, 'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
+                print >> sys.stderr, 'broadcast success?'
+            except Exception:
+                print >> sys.stderr, 'broadcast put fail'
+                pass
 
             if created:
                 return Response({'replaced': 0, 'msg': 'success', 'partition_id': localNode.partition_id(), 'time': t,
