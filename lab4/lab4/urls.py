@@ -24,9 +24,10 @@ urlpatterns = [
     url(r'^kvs/gossip', views.gossip),
     url(r'^kvs/get_partition_id', views.get_partition_id),
     url(r'^kvs/get_partition_members', views.get_partition_members),
-    url(r'^kvs/(?P<key>[a-zA-Z0-9_]{1,250})$', views.kvs_response),
-    url(r'^kvs/(?P<key>[a-zA-Z0-9_]){251,}$', views.bad_key_response),
+    url(r'^kvs/get_all_partition_ids', view.get_all_partition_ids),
     url(r'^payload/', views.payload_update),
     url(r'^get_simple/', views.get_simple),
     url(r'^broadcast_put/', views.broadcast_put),
+    url(r'^kvs/(?P<key>[a-zA-Z0-9_]{1,250})$', views.kvs_response),
+    url(r'^kvs/(?P<key>[a-zA-Z0-9_]){251,}$', views.bad_key_response),
 ]

@@ -10,37 +10,34 @@ from sys import stderr
 from collections import Counter  # Don't listen to the linter he LIES and tells you we're not using this. Bad linter. No.
 from chord_operations import localNode, Node
 
-@api_view(['GET', 'POST', 'DELETE'])
+@api_view(['GET'])
 def get_partition_id(request):
-    if request.method == 'GET':
         return Response({'msg': 'success',
                           'partition_id': localNode.partition_id()})
+
+@api_view(['GET'])
+def get_partition_members(request):
+    requested_id = int(request.data.get('partition_id'))
+    if requested_id:
+        if localNode.partition_id() == requested_id:
+            members = [node.address for node in localNode.partition_members()]
+            return Response({'msg': 'success',
+                             'partition_members': members})
+        else:
+            successor_ip = localNode.get_successor_ip()
+            req.get('http://' + successor_ip + '/kvs/get_partition_members',
+                    data={'partition_id': requested_id})
     else:
-        return Response({'msg': 'error',
-                         'error': 'only GET requests can obtain partition id'},
+        return Response({'msg': 'error', 'error': 'invalid partition id'},
                          status=status.HTTP_400_BAD_REQUEST)
 
-@api_view(['GET', 'POST', 'DELETE'])
-def get_partition_members(request):
+@api_view(['GET'])
+def get_all_partition_ids(request)
     if request.method == 'GET':
-        requested_id = int(request.data.get('partition_id'))
-        
-            if requested_id:
-                if localNode.partition_id() == requested_id:
-                    members = [node.address for node in localNode.partition_members()]
-                    return Response({'msg': 'success',
-                                     'partition_members': members})
-
-                else:
-                    successor_ip = localNode.get_successor_ip()
-                    req.get('http://' + successor_ip + '/kvs/get_partition_members',
-                            data={'partition_id': requested_id})
-            else:
-                return Response({'msg': 'error', 'error': 'invalid partition id'},
-                                 status=status.HTTP_400_BAD_REQUEST)
+        # Do the shits
     else:
         return Response({'msg': 'error',
-                         'error': 'only GET requests can obtain partition id'},
+                         'error': 'only GET requests can obtain all partition ids'},
                          status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET', 'POST', 'DELETE'])
