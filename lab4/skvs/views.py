@@ -31,15 +31,7 @@ def get_partition_members(request):
     else:
         return Response({'msg': 'error', 'error': 'invalid partition id'},
                          status=status.HTTP_400_BAD_REQUEST)
-
-@api_view(['GET'])
-def get_all_partition_ids(request)
-    if request.method == 'GET':
-        # Do the shits
-    else:
-        return Response({'msg': 'error',
-                         'error': 'only GET requests can obtain all partition ids'},
-                         status=status.HTTP_400_BAD_REQUEST)
+                         
 
 @api_view(['GET', 'POST', 'DELETE'])
 def gossip(request):
