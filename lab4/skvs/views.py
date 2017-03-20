@@ -19,7 +19,7 @@ def get_partition_id(request):
 @api_view(['GET'])
 def get_partition_members(request):
     requested_id = int(request.data.get('partition_id'))
-    if requested_id:
+    if requested_id != None:
         if localNode.partition_id() == requested_id:
             members = [node.address for node in localNode.partition_members()]
             return Response({'msg': 'success',
@@ -33,9 +33,9 @@ def get_partition_members(request):
                          status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])
-def get_all_partition_ids(request)
+def get_all_partition_ids(request):
     if request.method == 'GET':
-        # Do the shits
+        print >> sys.stderr, "inside else statment"
     else:
         return Response({'msg': 'error',
                          'error': 'only GET requests can obtain all partition ids'},

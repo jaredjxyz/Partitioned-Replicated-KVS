@@ -299,7 +299,7 @@ if __name__ == "__main__":
     hostname = 'localhost'
     network = 'mynet'
     sudo = 'sudo'
-    tests_to_run = [1, 2, 3, 4, 5, 6]
+    tests_to_run = [1]
     if 1 in tests_to_run:
         try: # Test 1
             test_description = """ Test1:
