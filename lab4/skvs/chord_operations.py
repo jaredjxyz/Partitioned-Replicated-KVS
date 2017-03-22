@@ -1,13 +1,9 @@
-import sys
 import requests as req
 import os
 import random
-import copy
-import time
 from time import sleep
 from collections import Counter
 from requests.exceptions import ConnectionError
-from time import sleep
 from threading import Thread
 
 KvsEntry = None
@@ -477,8 +473,9 @@ def delete_partition_member(address, node):
 
 
 def get_partition_id(address):
-    print >> sys.stderr, "CALLING GET_PARTITION_ID"
-    sleep(1)
+    """
+    Asks the address for its partition ID
+    """
     res = req.get('http://' + address + '/kvs',
                   params={'request': 'partition_id'})
 

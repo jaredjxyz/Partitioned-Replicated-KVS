@@ -87,6 +87,7 @@ class SkvsConfig(AppConfig):
                 readyThread = Thread(target=getReady, args=[addresses])
                 readyThread.start()
 
+
 def getReady(addresses):
     while True:
         sleep(1)

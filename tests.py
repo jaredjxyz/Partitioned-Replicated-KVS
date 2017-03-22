@@ -11,11 +11,11 @@ import time
 NODE_COUNTER = 2
 PRINT_HTTP_REQUESTS = False
 PRINT_HTTP_RESPONSES = False
-AVAILABILITY_THRESHOLD = 1 
+AVAILABILITY_THRESHOLD = 1
 TB = 5
 
 class Node:
-    
+
     def __init__(self, access_port, ip, node_id):
         self.access_port = access_port
         self.ip = ip
@@ -70,7 +70,7 @@ def send_get_request(hostname, node, key, causal_payload=''):
         print "Cannot retrieve key " + str(key) + " that should be present in the kvs"
         print e
     return d
-    
+
 
 def send_put_request(hostname, node, key, value, causal_payload=''):
     d = None
@@ -157,11 +157,11 @@ def start_new_node(container_name, K=2, net='net', sudo='sudo'):
     time.sleep(10)
     return Node(port, ip, node_id)
 
-def stop_all_nodes(sudo):                                           
+def stop_all_nodes(sudo):
     running_containers = subprocess.check_output([sudo, 'docker',  'ps', '-q'])
     if len(running_containers):
         print "Stopping all nodes"
-        os.system(sudo + " docker kill $(" + sudo + " docker ps -q)") 
+        os.system(sudo + " docker kill $(" + sudo + " docker ps -q)")
 
 def stop_node(node, sudo='sudo'):
     cmd_str = sudo + " docker kill %s" % node.id
@@ -295,7 +295,7 @@ def connect_node(node, network, sudo):
     time.sleep(0.5)
 
 if __name__ == "__main__":
-    container_name = 'hw4'
+    container_name = 'kvs'
     hostname = 'localhost'
     network = 'mynet'
     sudo = 'sudo'
@@ -303,11 +303,11 @@ if __name__ == "__main__":
     if 1 in tests_to_run:
         try: # Test 1
             test_description = """ Test1:
-            Node additions/deletions. A kvs consists of 2 partitions with 2 replicas each. 
-            I add 3 new nodes. The number of partitions should become 4. Then I delete 2 nodes. 
+            Node additions/deletions. A kvs consists of 2 partitions with 2 replicas each.
+            I add 3 new nodes. The number of partitions should become 4. Then I delete 2 nodes.
             The number of partitions should become 3. """
             print test_description
-            print 
+            print
             print "Starting kvs ..."
             nodes = start_kvs(4, container_name, K=2, net=network, sudo=sudo)
 
@@ -379,7 +379,7 @@ if __name__ == "__main__":
             resp_dict2 = add_node_to_kvs(hostname, nodes[2], n2)
             time.sleep(2)
 
-            if not (resp_dict1 is not None and resp_dict2 is not None and 
+            if not (resp_dict1 is not None and resp_dict2 is not None and
                 resp_dict1['msg'] == 'success' and resp_dict2['msg'] == 'success'):
                 raise Exception("Problems with adding 2 new nodes")
             print "Nodes were successfully added. Verifying that no keys were dropped."
@@ -468,7 +468,7 @@ if __name__ == "__main__":
             test_description = """ Test 4:
             A kvs consists of 2 partitions with 2 replicas each. I send 50 randomly generated keys to the kvs.
             I choose 2 keys from the same partition, then I send concurrently updates to these keys.
-            No errors should occur. Then I sleep for few seconds, update each key and verify that the upades 
+            No errors should occur. Then I sleep for few seconds, update each key and verify that the upades
             are successful.
             """
             print test_description
