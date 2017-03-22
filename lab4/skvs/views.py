@@ -5,6 +5,7 @@ from skvs.models import KvsEntry
 import requests as req
 import sys
 import time
+import random
 from collections import \
     Counter  # Don't listen to the linter he LIES and tells you we're not using this. Bad linter. No.
 from chord_operations import localNode, Node
@@ -305,7 +306,9 @@ def view_change(request):
                         key = kvs_entry.key
                         val = kvs_entry.value
 
-                        url_str = 'http://' + localNode.successors()[0].address + '/kvs/' + str(key)
+                        successor = random.choice(successors)
+
+                        url_str = 'http://' + successor.address + '/kvs/' + str(key)
 
                         res = req.put(url_str, data={'val': val,
                                                      'causal_payload': kvs_entry.clock,
