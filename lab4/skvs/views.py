@@ -5,16 +5,16 @@ from skvs.models import KvsEntry
 import requests as req
 import sys
 import time
-from time import sleep
-from sys import stderr
 from collections import \
     Counter  # Don't listen to the linter he LIES and tells you we're not using this. Bad linter. No.
 from chord_operations import localNode, Node
 
+
 @api_view(['GET'])
 def get_partition_id(request):
         return Response({'msg': 'success',
-                          'partition_id': localNode.partition_id()})
+                        'partition_id': localNode.partition_id()})
+
 
 @api_view(['GET'])
 def get_partition_members(request):
@@ -30,7 +30,7 @@ def get_partition_members(request):
                     data={'partition_id': requested_id})
     else:
         return Response({'msg': 'error', 'error': 'invalid partition id'},
-                         status=status.HTTP_400_BAD_REQUEST)
+                        status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET', 'POST', 'DELETE'])
@@ -218,7 +218,6 @@ def view_change(request):
     For adding or removing node, query param = type, data = ip_port
     For joining another node's circle, query param = 'joinme'
     """
-    # change_type = request.query_params
 
     ip_port = request.data.get('ip_port')
     if ip_port:
@@ -285,6 +284,7 @@ def view_change(request):
 
     return Response({'msg': 'Error: No IP_PORT'}, status=status.HTTP_400_BAD_REQUEST)
 
+
 @api_view(['GET'])
 def get_all_partition_ids(request):
 
@@ -294,7 +294,7 @@ def get_all_partition_ids(request):
     if 'source' not in request.data:
         list = []
         list.extend([int(localNode.partition_id())])
-        res = req.get(url_str, data = {'source': localNode.partition_id(), 'partition_id_list': repr(list)})
+        res = req.get(url_str, data={'source': localNode.partition_id(), 'partition_id_list': repr(list)})
 
     if 'source' in request.data and int(request.data['source']) == localNode.partition_id():
         return Response({'msg': 'success', 'partition_id_list': request.data['partition_id_list']})
@@ -302,7 +302,7 @@ def get_all_partition_ids(request):
     if 'source' in request.data and int(request.data['source']) != localNode.partition_id():
         list = eval(request.data['partition_id_list'])
         list.extend([int(localNode.partition_id())])
-        res = req.get(url_str, data = {'source': request.data['source'], 'partition_id_list': repr(list)})
+        res = req.get(url_str, data={'source': request.data['source'], 'partition_id_list': repr(list)})
 
     return Response(res.json(), status=status.HTTP_200_OK)
 
@@ -312,10 +312,12 @@ def payload_update(request):
     localNode.counter = localNode.counter | eval(request.data['load'])
     return Response(status=status.HTTP_200_OK)
 
+
 # handle incorrect keys
 @api_view(['GET', 'PUT', 'DELETE'])
 def bad_key_response(request, key):
     return Response(status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+
 
 # tell your friends
 @api_view(['PUT'])
@@ -373,7 +375,6 @@ def kvs_response(request, key):
             obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t,
                                                                                 'clock': repr(localNode.counter)})
 
-            #for node in localNode.partition_members():
             try:
                 req.put('http://' + localNode.partition_members()[0] + '/broadcast_put/',
                         data={'key': key, 'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
@@ -401,8 +402,8 @@ def kvs_response(request, key):
                     if 'clock' in cheq.json():
 
                         # if the poll returns a vector clock sooner than our own
-                        if eval(cheq.json()['clock'])[localNode.partition_id()] > localNode.counter[
-                            localNode.partition_id()]:
+                        if eval((cheq.json()['clock'])[localNode.partition_id()] >
+                                localNode.counter[localNode.partition_id()]):
                             # merge clocks together
                             localNode.counter = localNode.counter | eval(cheq.json()['clock'])
                             # update keys to value with more recent clock
@@ -410,15 +411,16 @@ def kvs_response(request, key):
                                                                                  'time': cheq.json()['time'],
                                                                                  'clock': cheq.json()['clock']})
 
-                        if eval(cheq.json()['clock'])[localNode.partition_id()] == localNode.counter[
-                            localNode.partition_id()] and not KvsEntry.objects.get(key=key).key == cheq.json()['key']:
+                        if (eval(cheq.json()['clock'])[localNode.partition_id()] ==
+                           localNode.counter[localNode.partition_id()] and not
+                           KvsEntry.objects.get(key=key).key == cheq.json()['key']):
+
                             # tiebreak and fix if they win tiebreak
                             if str(node.address) + (cheq.json()['time']) > str(localNode.address) + str(
                                     KvsEntry.objects.get(key=key).time):
                                 KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'],
                                                                                      'time': cheq.json()['time'],
                                                                                      'clock': cheq.json()['clock']})
-                                # pass
 
                 except Exception:
                     print >> sys.stderr, "get poll fail"

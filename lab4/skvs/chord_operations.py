@@ -1,13 +1,9 @@
-import sys
 import requests as req
 import os
 import random
-import copy
-import time
 from time import sleep
 from collections import Counter
 from requests.exceptions import ConnectionError
-from time import sleep
 from threading import Thread
 
 KvsEntry = None
