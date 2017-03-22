@@ -8,6 +8,7 @@ import time
 from collections import \
     Counter  # Don't listen to the linter he LIES and tells you we're not using this. Bad linter. No.
 from chord_operations import localNode, Node
+from requests.exceptions import ConnectionError
 
 
 @api_view(['GET'])
@@ -49,34 +50,41 @@ def gossip(request):
         url_str = 'http://' + partner_ip_port + '/kvs/' + entry.key
 
         # get same key from partner
-        partner_vc = eval(req.get(url_str).json()['causal_payload'])
+        res_data = req.get(url_str).json()
+        partner_vc = eval(res_data['causal_payload'])
+        my_vc = eval(entry.clock)
+
         # if our vector clocks are not equal
-        if not eval(entry.clock)[localNode.partition_id()] == partner_vc[localNode.partition_id()]:
+        if my_vc[localNode.partition_id()] != partner_vc[localNode.partition_id()]:
             temp = localNode.counter
-            localNode.counter = localNode.counter | partner_vc
+            # Update counter with partner vc. Counter should already be up to date with our vc
+            localNode.counter |= partner_vc
             # update our key if it is the stale one
             if partner_vc[localNode.partition_id()] > temp[localNode.partition_id()]:
-                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'],
-                                                                           'time': req.get(url_str).json()['time'],
+                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': res_data['value'],
+                                                                           'time': res_data['time'],
                                                                            'clock': repr(
-                                                                               localNode.counter | partner_vc)})
+                                                                               localNode.counter)})
             # TODO tiebreaker based on server id + timestamp
             # elif : partner wins the tiebreak
-            elif partner_ip_port + str(req.get(url_str).json()['time']) > localNode.address + str(
+            elif partner_ip_port + str(res_data['time']) > localNode.address + str(
                     KvsEntry.objects.get(key=entry.key).time):
-                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'],
-                                                                           'time': req.get(url_str).json()['time'],
+                # Update our local VC
+                localNode.counter |= partner_vc
+
+                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': res_data['value'],
+                                                                           'time': res_data['time'],
                                                                            'clock': repr(
-                                                                               localNode.counter | partner_vc)})
+                                                                               localNode.counter)})
         # if vector clocks are equal, but the stored times are different, tiebreak
-        if eval(entry.clock)[localNode.partition_id()] == partner_vc[localNode.partition_id()] and not entry.time == \
-                req.get(url_str).json()['time']:
+        if (my_vc[localNode.partition_id()] == partner_vc[localNode.partition_id()] and
+           entry.time < res_data['time']):
+            localNode.counter += partner_vc
             # if we are the stale value, update our key to partner's key
-            if entry.time < req.get(url_str).json()['time']:
-                KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'],
-                                                                           'time': req.get(url_str).json()['time'],
-                                                                           'clock': repr(
-                                                                               localNode.counter | partner_vc)})
+            KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': res_data['value'],
+                                                                       'time': res_data['time'],
+                                                                       'clock': repr(
+                                                                       localNode.counter)})
 
 
 @api_view(['GET', 'POST', 'DELETE'])
@@ -401,14 +409,13 @@ def kvs_response(request, key):
             # If object with that key does not exist, it will be created. If it does exist, value will be updated.
             obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t,
                                                                                 'clock': repr(localNode.counter)})
-
-            try:
-                req.put('http://' + localNode.partition_members()[0] + '/broadcast_put/',
-                        data={'key': key, 'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
-            except Exception:
-                pass
-
             if created:
+                for node in localNode.partition_members():
+                    try:
+                        req.put('http://' + node.address + '/broadcast_put/',
+                                data={'key': key, 'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
+                    except ConnectionError:
+                        pass
                 return Response({'replaced': 0, 'msg': 'success', 'partition_id': localNode.partition_id(), 'timestamp': t,
                                  'causal_payload': repr(localNode.counter)},
                                 status=status.HTTP_201_CREATED)
@@ -427,7 +434,7 @@ def kvs_response(request, key):
                     if 'clock' in cheq.json():
 
                         # if the poll returns a vector clock sooner than our own
-                        if eval((cheq.json()['clock'])[localNode.partition_id()] >
+                        if (eval(cheq.json()['clock'])[localNode.partition_id()] >
                                 localNode.counter[localNode.partition_id()]):
                             # merge clocks together
                             localNode.counter = localNode.counter | eval(cheq.json()['clock'])
@@ -447,7 +454,7 @@ def kvs_response(request, key):
                                                                                      'time': cheq.json()['time'],
                                                                                      'clock': cheq.json()['clock']})
 
-                except Exception:
+                except ConnectionError:
                     continue
 
             try:
