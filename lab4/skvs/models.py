@@ -6,10 +6,10 @@ class KvsEntry(models.Model):
     key = models.CharField(max_length=250)
     value = models.TextField()
     clock = models.TextField()
-    time = models.FloatField()
+    timestamp = models.FloatField()
 
     @classmethod
     # for entering a key, value pair
-    def create_entry(cls, key, value, clock, time):
-        entry = cls(key, value, clock, time)
+    def create_entry(cls, key, value, clock, timestamp):
+        entry = cls(key, value, clock, timestamp)
         return entry

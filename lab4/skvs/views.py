@@ -57,27 +57,27 @@ def gossip(request):
             # update our key if it is the stale one
             if partner_vc[localNode.partition_id()] > temp[localNode.partition_id()]:
                 KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': res_data['value'],
-                                                                           'time': res_data['time'],
+                                                                           'timestamp': res_data['timestamp'],
                                                                            'clock': repr(
                                                                                localNode.counter)})
             # TODO tiebreaker based on server id + timestamp
             # elif : partner wins the tiebreak
-            elif partner_ip_port + str(res_data['time']) > localNode.address + str(
-                    KvsEntry.objects.get(key=entry.key).time):
+            elif partner_ip_port + str(res_data['timestamp']) > localNode.address + str(
+                    KvsEntry.objects.get(key=entry.key).timestamp):
                 # Update our local VC
                 localNode.counter |= partner_vc
 
                 KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': res_data['value'],
-                                                                           'time': res_data['time'],
+                                                                           'timestamp': res_data['timestamp'],
                                                                            'clock': repr(
                                                                                localNode.counter)})
         # if vector clocks are equal, but the stored times are different, tiebreak
         if (my_vc[localNode.partition_id()] == partner_vc[localNode.partition_id()] and
-           entry.time < res_data['time']):
+           entry.timestamp < res_data['timestamp']):
             localNode.counter += partner_vc
             # if we are the stale value, update our key to partner's key
             KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': res_data['value'],
-                                                                       'time': res_data['time'],
+                                                                       'timestamp': res_data['timestamp'],
                                                                        'clock': repr(
                                                                        localNode.counter)})
     return Response({'msg': 'OK'})
@@ -164,14 +164,14 @@ def process_remote(request):
         # Add a partition member
         elif request.query_params.get('request') == 'partition_member':
             partition_member_ip = request.data.get('ip_port')
-            if partition_member_ip:
+            if partition_member_ip is not None:
                 localNode.set_partition_member(Node(partition_member_ip))
                 return Response({'msg': 'success'})
 
         elif request.query_params.get('request') == 'partition_id':
-            partition_id = int(request.data.get('id'))
+            partition_id = request.data.get('id')
             if partition_id:
-                localNode.set_partition_id(partition_id)
+                localNode.set_partition_id(int(partition_id))
                 return Response({'msg': 'success'})
 
         # Join another node. # TODO: Make this work
@@ -262,15 +262,18 @@ def view_change(request):
                 if len(localNode.partition_members()) > 1:
                     for partition_member in partition_members:
                         partition_member.remove_partition_member(localNode)
+                        localNode.remove_partition_member(partition_member)
 
                     for successor in successors:
                         successor.remove_predecessor(localNode)
+                        localNode.remove_successor(successor)
 
                     for predecessor in predecessors:
                         predecessor.remove_successor(localNode)
+                        localNode.remove_predecessor(predecessor)
 
                     # if so, then delete all our entries after performing gossip
-                    partner_node = localNode.successors()[0]
+                    partner_node = successors[0]
                     req.put('http://' + partner_node.address + '/kvs/gossip', params={'request': 'gossip'},
                             data={'ip_port': localNode.address})
 
@@ -296,6 +299,7 @@ def view_change(request):
                     for partition_member in partition_members:
                         partition_member.remove_partition_member(localNode)
 
+                    print >> sys.stderr, "Getting to kvs entries"
                     # migrate the key-values
                     for kvs_entry in KvsEntry.objects.all():
                         key = kvs_entry.key
@@ -303,7 +307,11 @@ def view_change(request):
 
                         url_str = 'http://' + localNode.successors()[0].address + '/kvs/' + str(key)
 
-                        res = req.put(url_str, data={'val': val})
+                        res = req.put(url_str, data={'val': val,
+                                                     'causal_payload': kvs_entry.clock,
+                                                     'timestamp': kvs_entry.timestamp})
+
+                        print >> sys.stderr, "DFAJNGFKAOSOFGJNASOKFGJDSAFGJODSAJFGDSAOJFGSAOGJAO"
 
                         if not (res.status_code == status.HTTP_200_OK or res.status_code == status.HTTP_201_CREATED):
                             return Response(res.json(), status=res.status_code)
@@ -365,7 +373,7 @@ def bad_key_response(request, key):
 def broadcast_put(request):
     merge = request.data
     localNode.counter = localNode.counter | eval(merge['clock'])
-    KvsEntry.objects.update_or_create(key=merge['key'], defaults={'value': merge['value'], 'time': merge['time'],
+    KvsEntry.objects.update_or_create(key=merge['key'], defaults={'value': merge['value'], 'timestamp': merge['timestamp'],
                                                                   'clock': repr(localNode.counter)})
     return Response(status=status.HTTP_200_OK)
 
@@ -376,7 +384,7 @@ def get_simple(request):
         desired_entry = KvsEntry.objects.get(key=request.data['key'])
         return Response(
             {'msg': 'success', 'key': desired_entry.key, 'value': desired_entry.value, 'source': 'get_simple',
-             'owner': localNode.address, 'time': desired_entry.time, 'clock': desired_entry.clock},
+             'owner': localNode.address, 'timestamp': desired_entry.timestamp, 'clock': desired_entry.clock},
             status=status.HTTP_200_OK)
     except Exception:
         expectedOwner = localNode.find_successors(request.data['key'])[0]
@@ -413,13 +421,13 @@ def kvs_response(request, key):
             localNode.counter[localNode.partition_id()] += 1
 
             # If object with that key does not exist, it will be created. If it does exist, value will be updated.
-            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'time': t,
+            obj, created = KvsEntry.objects.update_or_create(key=key, defaults={'value': input_value, 'timestamp': t,
                                                                                 'clock': repr(localNode.counter)})
             if created:
                 for node in localNode.partition_members():
                     try:
-                        req.put('http://' + node.address + '/broadcast_put/',
-                                data={'key': key, 'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
+                        req.put('http://' + node.address + '/broadcast_put',
+                                data={'key': key, 'value': input_value, 'timestamp': t, 'clock': repr(localNode.counter)})
                     except ConnectionError:
                         pass
                 return Response({'replaced': 0, 'msg': 'success', 'partition_id': localNode.partition_id(), 'timestamp': t,
@@ -436,7 +444,7 @@ def kvs_response(request, key):
             # read repair for gets since you're polling everyone anyways
             for node in localNode.partition_members():
                 try:
-                    cheq = req.get('http://' + node.address + '/get_simple/', data={'key': key})
+                    cheq = req.get('http://' + node.address + '/get_simple', data={'key': key})
                     if 'clock' in cheq.json():
 
                         # if the poll returns a vector clock sooner than our own
@@ -446,7 +454,7 @@ def kvs_response(request, key):
                             localNode.counter = localNode.counter | eval(cheq.json()['clock'])
                             # update keys to value with more recent clock
                             KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'],
-                                                                                 'time': cheq.json()['time'],
+                                                                                 'timestamp': cheq.json()['timestamp'],
                                                                                  'clock': cheq.json()['clock']})
 
                         if (eval(cheq.json()['clock'])[localNode.partition_id()] ==
@@ -454,10 +462,10 @@ def kvs_response(request, key):
                            KvsEntry.objects.get(key=key).key == cheq.json()['key']):
 
                             # tiebreak and fix if they win tiebreak
-                            if str(node.address) + (cheq.json()['time']) > str(localNode.address) + str(
-                                    KvsEntry.objects.get(key=key).time):
+                            if str(node.address) + (cheq.json()['timestamp']) > str(localNode.address) + str(
+                                    KvsEntry.objects.get(key=key).timestamp):
                                 KvsEntry.objects.update_or_create(key=key, defaults={'value': cheq.json()['value'],
-                                                                                     'time': cheq.json()['time'],
+                                                                                     'timestamp': cheq.json()['timestamp'],
                                                                                      'clock': cheq.json()['clock']})
 
                 except ConnectionError:
@@ -467,7 +475,7 @@ def kvs_response(request, key):
                 desired_entry = KvsEntry.objects.get(key=key)
                 return Response(
                     {'msg': 'success', 'value': desired_entry.value, 'partition_id': localNode.partition_id(),
-                     'timestamp': desired_entry.time, 'causal_payload': desired_entry.clock},
+                     'timestamp': desired_entry.timestamp, 'causal_payload': desired_entry.clock},
                     status=status.HTTP_200_OK)
             except KvsEntry.DoesNotExist:
                 expectedOwner = localNode.find_successors(key)[0]
@@ -483,7 +491,7 @@ def kvs_response(request, key):
 
         # create the proper url with successor's ip
         url_str = 'http://' + successor_ip + '/kvs/' + key
-        req.put('http://' + successor_ip + '/payload/ ', data={'load': repr(localNode.counter)})
+        req.put('http://' + successor_ip + '/payload', data={'load': repr(localNode.counter)})
 
         if method == 'GET':
             # forward request with query content
