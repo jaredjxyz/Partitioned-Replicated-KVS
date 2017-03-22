@@ -312,7 +312,7 @@ def view_change(request):
 
             # if instead, we are not the node to be removed, forward the remove_node request to the doomed node
             else:
-                res = req.put("http://" + ip_port + '/kvs/view_update',
+                res = req.put("http://" + ip_port + '/kvs/update_view',
                               params={'type': 'remove'},
                               data={'ip_port': ip_port})
                 return Response(res.json(), status=res.status_code)
