@@ -241,15 +241,6 @@ def view_change(request):
                              'partition_id': new_node.partition_id(),
                              'number_of_partitions': num_partition_ids})
 
-            ip = localNode.address
-            url_str = 'http://' + ip + '/get_all_partition_ids'
-
-            return Response({'msg': 'success', 'partition_id': new_node.partition_id(),
-                            'number_of_partitions': len(eval(req.get(url_str).json()['partition_id_list']))},
-                            status=status.HTTP_201_CREATED)
-            # except Exception:
-            #     return Response(status=status.HTTP_400_BAD_REQUEST)
-
         # TODO: Test Remove!
         elif change_type == 'remove':
             # if we are the node that is going to be removed
