@@ -31,7 +31,7 @@ def get_partition_members(request):
     else:
         return Response({'msg': 'error', 'error': 'invalid partition id'},
                          status=status.HTTP_400_BAD_REQUEST)
-                         
+
 
 @api_view(['GET', 'POST', 'DELETE'])
 def gossip(request):
@@ -226,8 +226,9 @@ def view_change(request):
         if change_type == 'add':
             # If add, then we signal the given IP to join us
             # try:
-            localNode.join(Node(ip_port))
-            return Response({'msg': 'success'})
+            new_node = Node(ip_port)
+            localNode.join(new_node)
+            return Response({'msg': 'success', 'partition_id': new_node.partition_id()})
             # except Exception:
             #     return Response(status=status.HTTP_400_BAD_REQUEST)
 
