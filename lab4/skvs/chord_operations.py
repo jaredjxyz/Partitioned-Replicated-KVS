@@ -88,12 +88,13 @@ class Node(object):
             # If we're already in a separate thread, run gossip in this thread
             if in_thread:
                 while self.partition_id() is not None:
+                    print >> sys.stderr, 'Partition id is', repr(self.partition_id())
                     # Wait between 0 and (# of partition members)*5 seconds
                     wait_time = random.random() * len(self.partition_members()) * 5
 
                     # Tell a random other node in our partition to ask around
-                    partner_node = random.choice(self.__partition_members)
-                    req.put('http://' + partner_node.address + '/kvs/gossip', params={'request': 'gossip'}, data={'ip_port': self.address})
+                    partner_node = random.choice(self.partition_members())
+                    req.put('http://' + partner_node.address + '/kvs/gossip', data={'ip_port': self.address})
                     sleep(wait_time)
 
             # If we're not already in a separate thread, create a new separate thread and run it
