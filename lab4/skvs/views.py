@@ -62,7 +62,7 @@ def gossip(request):
                                                                                localNode.counter | partner_vc)})
             # TODO tiebreaker based on server id + timestamp
             # elif : partner wins the tiebreak
-            elif str(partner_ip_port) + str(req.get(url_str).json()['time']) > str(localNode.address) + str(
+            elif partner_ip_port + str(req.get(url_str).json()['time']) > localNode.address + str(
                     KvsEntry.objects.get(key=entry.key).time):
                 KvsEntry.objects.update_or_create(key=entry.key, defaults={'value': req.get(url_str).json()['value'],
                                                                            'time': req.get(url_str).json()['time'],
@@ -138,11 +138,8 @@ def process_remote(request):
         # Use this for any arbitrary test you may want to run
         elif request.query_params.get('request') == 'test':
             node = localNode.partition_members()[1]
-            print >> sys.stderr, 'Node:', node
             node.set_partition_member(Node('10.0.0.0'))
-            print >> sys.stderr, node.partition_members()
             node.remove_partition_member(Node('10.0.0.0'))
-            print >> sys.stderr, 'Removed', node.partition_members()
             return Response({'msg': 'success'})
 
     elif request.method == 'POST':
@@ -168,7 +165,7 @@ def process_remote(request):
                 return Response({'msg': 'success'})
 
         elif request.query_params.get('request') == 'partition_id':
-            partition_id = request.data.get('id')
+            partition_id = int(request.data.get('id'))
             if partition_id:
                 localNode.set_partition_id(partition_id)
                 return Response({'msg': 'success'})
@@ -235,33 +232,55 @@ def view_change(request):
             # try:
             new_node = Node(ip_port)
             localNode.join(new_node)
-            return Response({'msg': 'success', 'partition_id': new_node.partition_id()})
-            # except Exception:
-            #     return Response(status=status.HTTP_400_BAD_REQUEST)
+
+            # Get a list of partition Ids so we can return the length
+            partition_id_res = req.get('http://' + localNode.address + '/kvs/get_all_partition_ids')
+            partition_id_list = eval(partition_id_res.json()['partition_id_list'])
+            num_partition_ids = len(partition_id_list)
+            return Response({'msg': 'success',
+                             'partition_id': new_node.partition_id(),
+                             'number_of_partitions': num_partition_ids})
 
         # TODO: Test Remove!
         elif change_type == 'remove':
             # if we are the node that is going to be removed
             if ip_port == localNode.address:
+
+                # Get partition Ids for response
+                partition_id_res = req.get('http://' + localNode.address + '/kvs/get_all_partition_ids')
+                partition_id_list = eval(partition_id_res.json()['partition_id_list'])
+                num_partition_ids = len(partition_id_list)
+
                 # check if we will still have others in our partition after our deletion
-                if localNode.partition_members() > 1:
+                if len(localNode.partition_members()) > 1:
                     # if so, then delete all our entries after performing gossip
-                    partner_node = localNode.successors()[0].address
-                    req.put('http://' + partner_node + '/kvs/gossip', params={'request': 'gossip'},
+                    partner_node = localNode.successors()[0]
+                    req.put('http://' + partner_node.address + '/kvs/gossip', params={'request': 'gossip'},
                             data={'ip_port': localNode.address})
                     for entry in KvsEntry.objects.all():
                         KvsEntry.objects.get(key=entry.key).delete()
+
                 else:
                     # otherwise, we must alter succ/pred relationships, then migrate our keys
                     # set this node's successors' predecessors to the node's predecessors
-                    for node in localNode.successors():
-                        for pred_node in localNode.predecessors():
-                            node.set_predecessor(pred_node)
+                    successors = localNode.successors()
+                    predecessors = localNode.predecessors()
+                    partition_members = localNode.partition_members()
+                    for succ_node in successors:
+                        succ_node.remove_predecessor(localNode)
+                        localNode.remove_successor(succ_node)
+                        for pred_node in predecessors:
+                            succ_node.set_predecessor(pred_node)
 
                     # set the node's predecessors' successors to the node's successors
-                    for pred_node in localNode.predecessors():
-                        for succ_node in localNode.successors():
+                    for pred_node in predecessors:
+                        pred_node.remove_successor(localNode)
+                        localNode.remove_predecessor(pred_node)
+                        for succ_node in successors:
                             pred_node.set_successor(succ_node)
+
+                    for partition_member in partition_members:
+                        partition_member.remove_partition_member(localNode)
 
                     # migrate the key-values
                     for kvs_entry in KvsEntry.objects.all():
@@ -272,16 +291,16 @@ def view_change(request):
 
                         res = req.put(url_str, data={'val': val})
 
-                        if res.status_code == status.HTTP_200_OK or res.status_code == status.HTTP_201_CREATED:
-                            pass
-                        else:
+                        if not (res.status_code == status.HTTP_200_OK or res.status_code == status.HTTP_201_CREATED):
                             return Response(res.json(), status=res.status_code)
 
                     # then set doomed node predecessor and successor to None
-                    localNode.set_predecessor(None)
-                    localNode.set_successor(None)
+                    localNode.set_partition_id(None)
+                    num_partition_ids -= 1
 
-                    return Response({'msg': 'success'}, status=status.HTTP_200_OK)
+                # Get partition Ids for response
+                return Response({'msg': 'success',
+                                 'number_of_partitions': num_partition_ids})
 
             # if instead, we are not the node to be removed, forward the remove_node request to the doomed node
             else:
@@ -290,7 +309,7 @@ def view_change(request):
                               data={'ip_port': ip_port})
                 return Response(res.json(), status=res.status_code)
 
-    return Response({'msg': 'Error: No IP_PORT'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'msg': 'Error: Bad Request'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET'])
@@ -386,9 +405,7 @@ def kvs_response(request, key):
             try:
                 req.put('http://' + localNode.partition_members()[0] + '/broadcast_put/',
                         data={'key': key, 'value': input_value, 'time': t, 'clock': repr(localNode.counter)})
-                print >> sys.stderr, 'broadcast success?'
             except Exception:
-                print >> sys.stderr, 'broadcast put fail'
                 pass
 
             if created:
@@ -431,7 +448,6 @@ def kvs_response(request, key):
                                                                                      'clock': cheq.json()['clock']})
 
                 except Exception:
-                    print >> sys.stderr, "get poll fail"
                     continue
 
             try:

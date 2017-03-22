@@ -5,6 +5,7 @@ from time import sleep
 from collections import Counter
 from requests.exceptions import ConnectionError
 from threading import Thread
+import sys
 
 KvsEntry = None
 # This can't be imported directly into here because of how Django works,
@@ -86,14 +87,14 @@ class Node(object):
         if self.is_local():
             # If we're already in a separate thread, run gossip in this thread
             if in_thread:
-                while True:
+                while self.partition_id() is not None:
                     # Wait between 0 and (# of partition members)*5 seconds
                     wait_time = random.random() * len(self.partition_members()) * 5
-                    sleep(wait_time)
 
                     # Tell a random other node in our partition to ask around
                     partner_node = random.choice(self.__partition_members)
                     req.put('http://' + partner_node.address + '/kvs/gossip', params={'request': 'gossip'}, data={'ip_port': self.address})
+                    sleep(wait_time)
 
             # If we're not already in a separate thread, create a new separate thread and run it
             else:
@@ -112,7 +113,7 @@ class Node(object):
         If this node is a local node, it just returns the known successor
         """
         if self.is_local():
-            return self.__successors
+            return list(self.__successors)
         else:
             return get_successors(self.address)
 
@@ -123,7 +124,7 @@ class Node(object):
         If this node is a local node, it just returns the known predecessor.
         """
         if self.is_local():
-            return self.__predecessors
+            return list(self.__predecessors)
         else:
             return get_predecessors(self.address)
 
@@ -132,7 +133,7 @@ class Node(object):
         Returns a list of all members of this partition, including self
         """
         if self.is_local():
-            return self.__partition_members
+            return list(self.__partition_members)
         else:
             return get_partition_members(self.address)
 
@@ -191,6 +192,7 @@ class Node(object):
         """
         Adds a partition member to this node
         """
+
         if self.is_local():
             self.__partition_members.append(node)
         else:
@@ -210,6 +212,7 @@ class Node(object):
         """
         Sets this node's partition ID
         """
+
         if self.is_local():
             self.__partition_id = partition_id
         else:
