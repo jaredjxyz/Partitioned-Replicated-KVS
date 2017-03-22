@@ -477,8 +477,9 @@ def delete_partition_member(address, node):
 
 
 def get_partition_id(address):
-    print >> sys.stderr, "CALLING GET_PARTITION_ID"
-    sleep(1)
+    """
+    Asks the address for its partition ID
+    """
     res = req.get('http://' + address + '/kvs',
                   params={'request': 'partition_id'})
 
