@@ -34,7 +34,7 @@ def get_partition_members(request):
             res = req.get('http://' + successor_ip + '/kvs/get_partition_members',
                           data={'partition_id': requested_id, 'source': int(localNode.partition_id())})
 
-        return Response(res.json())
+        return Response(res.json(), status=res.status_code)
 
     else:
         return Response({'msg': 'error', 'error': 'invalid partition id'},
@@ -241,6 +241,15 @@ def view_change(request):
                              'partition_id': new_node.partition_id(),
                              'number_of_partitions': num_partition_ids})
 
+            ip = localNode.address
+            url_str = 'http://' + ip + '/get_all_partition_ids'
+
+            return Response({'msg': 'success', 'partition_id': new_node.partition_id(),
+                            'number_of_partitions': len(eval(req.get(url_str).json()['partition_id_list']))},
+                            status=status.HTTP_201_CREATED)
+            # except Exception:
+            #     return Response(status=status.HTTP_400_BAD_REQUEST)
+
         # TODO: Test Remove!
         elif change_type == 'remove':
             # if we are the node that is going to be removed
@@ -409,11 +418,11 @@ def kvs_response(request, key):
                 pass
 
             if created:
-                return Response({'replaced': 0, 'msg': 'success', 'partition_id': localNode.partition_id(), 'time': t,
+                return Response({'replaced': 0, 'msg': 'success', 'partition_id': localNode.partition_id(), 'timestamp': t,
                                  'causal_payload': repr(localNode.counter)},
                                 status=status.HTTP_201_CREATED)
             else:
-                return Response({'replaced': 1, 'msg': 'success', 'partition_id': localNode.partition_id(), 'time': t,
+                return Response({'replaced': 1, 'msg': 'success', 'partition_id': localNode.partition_id(), 'timestamp': t,
                                  'causal_payload': repr(localNode.counter)},
                                 status=status.HTTP_200_OK)
 
@@ -454,7 +463,7 @@ def kvs_response(request, key):
                 desired_entry = KvsEntry.objects.get(key=key)
                 return Response(
                     {'msg': 'success', 'value': desired_entry.value, 'partition_id': localNode.partition_id(),
-                     'time': desired_entry.time, 'causal_payload': desired_entry.clock},
+                     'timestamp': desired_entry.time, 'causal_payload': desired_entry.clock},
                     status=status.HTTP_200_OK)
             except KvsEntry.DoesNotExist:
                 expectedOwner = localNode.find_successors(key)[0]
