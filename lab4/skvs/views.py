@@ -41,16 +41,6 @@ def get_partition_members(request):
                         status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['GET'])
-def get_all_partition_ids(request):
-    if request.method == 'GET':
-        print >> sys.stderr, "inside else statment"
-    else:
-        return Response({'msg': 'error',
-                         'error': 'only GET requests can obtain all partition ids'},
-                        status=status.HTTP_400_BAD_REQUEST)
-
-
 @api_view(['GET', 'POST', 'DELETE'])
 def gossip(request):
     partner_ip_port = request.data.get('ip_port')
