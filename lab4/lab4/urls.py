@@ -20,7 +20,7 @@ from skvs import views
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
     url(r'^kvs$', views.process_remote),
-    url(r'^kvs/view_update', views.view_change),
+    url(r'^kvs/update_view', views.view_change),
     url(r'^kvs/gossip', views.gossip),
     url(r'^kvs/get_partition_id', views.get_partition_id),
     url(r'^kvs/get_partition_members', views.get_partition_members),
