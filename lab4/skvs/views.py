@@ -235,9 +235,14 @@ def view_change(request):
             # try:
             new_node = Node(ip_port)
             localNode.join(new_node)
-            return Response({'msg': 'success', 'partition_id': new_node.partition_id()})
-            # except Exception:
-            #     return Response(status=status.HTTP_400_BAD_REQUEST)
+
+            # Get a list of partition Ids so we can return the length
+            partition_id_res = req.get('http://' + localNode.address + '/kvs/get_all_partition_ids')
+            partition_id_list = eval(partition_id_res.json()['partition_id_list'])
+            num_partition_ids = len(partition_id_list)
+            return Response({'msg': 'success',
+                             'partition_id': new_node.partition_id(),
+                             'number_of_partitions': num_partition_ids})
 
         # TODO: Test Remove!
         elif change_type == 'remove':
