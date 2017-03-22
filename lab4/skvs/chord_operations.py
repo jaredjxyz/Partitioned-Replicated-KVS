@@ -88,7 +88,6 @@ class Node(object):
             # If we're already in a separate thread, run gossip in this thread
             if in_thread:
                 while self.partition_id() is not None:
-                    print >> sys.stderr, 'Partition id is', repr(self.partition_id())
                     # Wait between 0 and (# of partition members)*5 seconds
                     wait_time = random.random() * len(self.partition_members()) * 5
 

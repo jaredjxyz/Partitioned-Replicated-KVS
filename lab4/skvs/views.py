@@ -40,7 +40,6 @@ def get_partition_members(request):
 @api_view(['PUT'])
 def gossip(request):
     partner_ip_port = request.data.get('ip_port')
-    print >> sys.stderr, partner_ip_port
     # compare all my keys to my partner's keys
     for entry in KvsEntry.objects.all():
         url_str = 'http://' + partner_ip_port + '/kvs/' + entry.key
@@ -263,15 +262,12 @@ def view_change(request):
                 if len(localNode.partition_members()) > 1:
                     for partition_member in partition_members:
                         partition_member.remove_partition_member(localNode)
-                        print >> sys.stderr, "Removing partition member from", partition_member.address
 
                     for successor in successors:
                         successor.remove_predecessor(localNode)
-                        print >> sys.stderr, "Removing predecessor from", successor.address
 
                     for predecessor in predecessors:
                         predecessor.remove_successor(localNode)
-                        print >> sys.stderr, "Removing successor from", predecessor.address
 
                     # if so, then delete all our entries after performing gossip
                     partner_node = localNode.successors()[0]
@@ -299,7 +295,6 @@ def view_change(request):
 
                     for partition_member in partition_members:
                         partition_member.remove_partition_member(localNode)
-                        print >> sys.stderr, "Removing self from partition members"
 
                     # migrate the key-values
                     for kvs_entry in KvsEntry.objects.all():
@@ -317,7 +312,6 @@ def view_change(request):
                     num_partition_ids -= 1
 
                 localNode.set_partition_id(None)
-                print >> sys.stderr, "Set partition id to none", localNode.partition_id()
 
                 return Response({'msg': 'success',
                                  'number_of_partitions': num_partition_ids})
