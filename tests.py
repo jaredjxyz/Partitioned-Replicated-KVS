@@ -298,7 +298,7 @@ if __name__ == "__main__":
     hostname = 'localhost'
     network = 'mynet'
     sudo = 'sudo'
-    tests_to_run = [1]
+    tests_to_run = [3]
     # tests_to_run = [1, 2, 3, 4, 5, 6, 7, 8]
     if 1 in tests_to_run:
         try: # Test 1

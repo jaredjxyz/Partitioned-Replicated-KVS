@@ -17,7 +17,6 @@ docker build -t hw4 .
 # tmux set -t pitted mouse on
 # tmux attach -t pitted
 
-
 python tests.py
 # tmux new-session -d -s pitted
 # tmux split-window -t pitted 'docker run -p 8081:8080 --net=mynet --ip=10.0.0.21 -e K=2 -e VIEW="10.0.0.21:8080,10.0.0.22:8080" -e "IPPORT"="10.0.0.21:8080" hw4'
