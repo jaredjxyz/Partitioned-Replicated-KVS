@@ -10,7 +10,7 @@ import time
 
 NODE_COUNTER = 2
 PRINT_HTTP_REQUESTS = False
-PRINT_HTTP_RESPONSES = False
+PRINT_HTTP_RESPONSES = True
 AVAILABILITY_THRESHOLD = 1
 TB = 5
 
@@ -299,7 +299,7 @@ if __name__ == "__main__":
     hostname = 'localhost'
     network = 'mynet'
     sudo = 'sudo'
-    tests_to_run = [1]
+    tests_to_run = [2]
     # tests_to_run = [1, 2, 3, 4, 5, 6, 7, 8]
     if 1 in tests_to_run:
         try: # Test 1
@@ -396,6 +396,7 @@ if __name__ == "__main__":
             print "Sending a request to remove the faulty node from the key-value store."
             resp_dict = delete_node_from_kvs(hostname, n1, nodes[0])
             time.sleep(5)
+            print resp_dict
             if not (resp_dict is not None and resp_dict['msg'] == 'success'):
                 raise Exception("Problems with deleting a node ")
             print "A node was successfully deleted. Verifying that no keys were dropped."

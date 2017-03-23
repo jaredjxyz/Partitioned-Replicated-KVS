@@ -3,7 +3,7 @@ import os
 import random
 from time import sleep
 from collections import Counter
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError, ReadTimeout
 from threading import Thread
 import sys
 
@@ -97,7 +97,7 @@ class Node(object):
                     # If partition members is not empty, ask a partition member to gossip with me
                     if partition_members:
                         partner_node = random.choice(partition_members)
-                        req.put('http://' + partner_node.address + '/kvs/gossip', data={'ip_port': self.address})
+                        req.put('http://' + partner_node.address + '/kvs/gossip', data={'ip_port': self.address}, timeout=3)
                     sleep(wait_time)
 
             # If we're not already in a separate thread, create a new separate thread and run it
@@ -117,7 +117,15 @@ class Node(object):
         If this node is a local node, it just returns the known successor
         """
         if self.is_local():
-            return list(self.__successors)
+            successor_list = []
+            for successor in self.__successors:
+                # Ping successor to make sure it's still alive
+                try:
+                    successor.partition_id()
+                    successor_list.append(successor)
+                except (ConnectionError, ReadTimeout):
+                    self.__successors.remove(successor)
+            return successor_list
         else:
             return get_successors(self.address)
 
@@ -128,7 +136,14 @@ class Node(object):
         If this node is a local node, it just returns the known predecessor.
         """
         if self.is_local():
-            return list(self.__predecessors)
+            predecessor_list = []
+            for predecessor in self.__predecessors:
+                try:
+                    predecessor.partition_id()
+                    predecessor_list.append(predecessor)
+                except (ConnectionError, ReadTimeout):
+                    self.__predecessors.remove(predecessor)
+            return predecessor_list
         else:
             return get_predecessors(self.address)
 
@@ -137,6 +152,13 @@ class Node(object):
         Returns a list of all members of this partition, including self
         """
         if self.is_local():
+            partition_member_list = []
+            for partition_member in self.__partition_members:
+                try:
+                    partition_member.partition_id()
+                    partition_member_list.append(partition_member)
+                except (ConnectionError, ReadTimeout):
+                    self.__partition_members.remove(partition_member)
             return list(self.__partition_members)
         else:
             return get_partition_members(self.address)
@@ -157,7 +179,8 @@ class Node(object):
         If this node is a local node, it just sets the local successor.
         """
         if self.is_local():
-            self.__successors.append(node)
+            if not any(node.address == successor.address for successor in self.__successors):
+                self.__successors.append(node)
         else:
             post_successor(self.address, node)
 
@@ -166,7 +189,8 @@ class Node(object):
         Sets multiple successors
         """
         if self.is_local():
-            self.__successors.extend(nodes)
+            for node in nodes:
+                self.set_successor(node)
         else:
             for node in nodes:
                 post_successor(self.address, node)
@@ -178,7 +202,8 @@ class Node(object):
         If this node is a local node, it just sets the local successor.
         """
         if self.is_local():
-            self.__predecessors.append(node)
+            if not any(node.address == predecessor.address for predecessor in self.__predecessors):
+                self.__predecessors.append(node)
         else:
             post_predecessor(self.address, node)
 
@@ -187,7 +212,8 @@ class Node(object):
         Sets multiple predecessors of this node
         """
         if self.is_local():
-            self.__predecessors.extend(nodes)
+            for node in nodes:
+                self.set_predecessor(node)
         else:
             for node in nodes:
                 post_predecessor(self.address, node)
@@ -198,7 +224,8 @@ class Node(object):
         """
 
         if self.is_local():
-            self.__partition_members.append(node)
+            if not any(node.address == partition_member.address for partition_member in self.__partition_members):
+                self.__partition_members.append(node)
         else:
             post_partition_member(self.address, node)
 
@@ -207,7 +234,8 @@ class Node(object):
         Adds multiple partition members to this node
         """
         if self.is_local():
-            self.__partition_members.extend(nodes)
+            for node in nodes:
+                self.set_partition_member(node)
         else:
             for node in nodes:
                 post_partition_member(self.address, node)
@@ -270,7 +298,7 @@ class Node(object):
                     else:
                         found = True
                         break
-                except ConnectionError:
+                except (ConnectionError, ReadTimeout):
                     continue
         return current_partition
 
@@ -282,7 +310,7 @@ class Node(object):
                 desired_node = desired_node.successor()
             return desired_node.predecessor()
         else:
-            res = req.get('http://' + self.address + '/kvs', params={'request': 'predecessor'}, data={'ip_port': key})
+            res = req.get('http://' + self.address + '/kvs', params={'request': 'predecessor'}, data={'ip_port': key}, timeout=3)
             # res comes in as {'address': ip_port}
             return Node(**res.json())
 
@@ -307,7 +335,7 @@ class Node(object):
                     group_numbers_and_sizes[group_number] = (group_size, node)
                     current_group = node.successors()
                     break
-                except ConnectionError:  # They're down
+                except (ConnectionError, ReadTimeout):  # They're down
                     continue
 
         # Find the group the new node should go in
@@ -396,7 +424,7 @@ def get_successors(address):
     """
     Asks the node at a given IP for its successor, returns that node.
     """
-    res = req.get('http://' + address + '/kvs', params={'request': 'successors'})
+    res = req.get('http://' + address + '/kvs', params={'request': 'successors'}, timeout=3)
     # Res comes in as a list of dicts
     successors = res.json()
     return map(lambda params: Node(**params), successors)
@@ -406,7 +434,7 @@ def get_predecessors(address):
     """
     Asks the node at a given IP for its predecessor, returns that node.
     """
-    res = req.get('http://' + address + '/kvs', params={'request': 'predecessors'})
+    res = req.get('http://' + address + '/kvs', params={'request': 'predecessors'}, timeout=3)
     # Predecessors come in as a list of dicts
     predecessors = res.json()
     return map(lambda params: Node(**params), predecessors)
@@ -416,7 +444,7 @@ def get_partition_members(address):
     """
     Asks the node at a given IP for its partition members
     """
-    res = req.get('http://' + address + '/kvs', params={'request': 'partition_members'})
+    res = req.get('http://' + address + '/kvs', params={'request': 'partition_members'}, timeout=3)
     # Partition members come in as a list of dicts
     partition_members = res.json()
     return map(lambda params: Node(**params), partition_members)
@@ -429,7 +457,7 @@ def post_successor(address, node):
     req.post('http://' + address + '/kvs',
              params={'request': 'successor'},
              data={'ip_port': node.address,
-                   'partition_id': node.partition_id()})
+                   'partition_id': node.partition_id()}, timeout=3)
 
 
 def post_predecessor(address, node):
@@ -439,7 +467,7 @@ def post_predecessor(address, node):
     req.post('http://' + address + '/kvs',
              params={'request': 'predecessor'},
              data={'ip_port': node.address,
-                   'partition_id': node.partition_id()})
+                   'partition_id': node.partition_id()}, timeout=3)
 
 
 def post_partition_member(address, node):
@@ -449,7 +477,7 @@ def post_partition_member(address, node):
     req.post('http://' + address + '/kvs',
              params={'request': 'partition_member'},
              data={'ip_port': node.address,
-                   'partition_id': node.partition_id()})
+                   'partition_id': node.partition_id()}, timeout=3)
 
 
 def delete_successor(address, node):
@@ -458,7 +486,7 @@ def delete_successor(address, node):
     """
     req.delete('http://' + address + '/kvs',
                params={'request': 'successor'},
-               data={'ip_port': node.address})
+               data={'ip_port': node.address}, timeout=3)
 
 
 def delete_predecessor(address, node):
@@ -467,7 +495,7 @@ def delete_predecessor(address, node):
     """
     req.delete('http://' + address + '/kvs',
                params={'request': 'predecessor'},
-               data={'ip_port': node.address})
+               data={'ip_port': node.address}, timeout=3)
 
 
 def delete_partition_member(address, node):
@@ -476,7 +504,7 @@ def delete_partition_member(address, node):
     """
     req.delete('http://' + address + '/kvs',
                params={'request': 'partition_member'},
-               data={'ip_port': node.address})
+               data={'ip_port': node.address}, timeout=3)
 
 
 def get_partition_id(address):
@@ -484,7 +512,7 @@ def get_partition_id(address):
     Asks the address for its partition ID
     """
     res = req.get('http://' + address + '/kvs',
-                  params={'request': 'partition_id'})
+                  params={'request': 'partition_id'}, timeout=.5)
 
     return res.json()['partition_id']
 
@@ -495,7 +523,7 @@ def send_partition_id(address, partition_id):
     """
     req.post('http://' + address + '/kvs',
              params={'request': 'partition_id'},
-             data={'id': partition_id})
+             data={'id': partition_id}, timeout=3)
 
 
 def sendKVSEntry(address, key, value):
@@ -511,7 +539,7 @@ def notify(address, node):
     """
     req.post('http://' + address + '/kvs',
              params={'request': 'notify'},
-             data={'ip_port': node.address})
+             data={'ip_port': node.address}, timeout=3)
 
 
 def run_gossip(address):
@@ -519,7 +547,7 @@ def run_gossip(address):
     Tells address to start gossipping
     """
     req.post('http://' + address + '/kvs',
-             params={'request': 'run_gossip'})
+             params={'request': 'run_gossip'}, timeout=3)
 
 
 def ask_ready(address):
@@ -528,8 +556,8 @@ def ask_ready(address):
     """
     try:
         res = req.get('http://' + address + '/kvs',
-                      params={'request': 'ready'})
+                      params={'request': 'ready'}, timeout=3)
 
-    except ConnectionError:
+    except (ConnectionError, ReadTimeout):
         return None
     return res.json()['msg']
