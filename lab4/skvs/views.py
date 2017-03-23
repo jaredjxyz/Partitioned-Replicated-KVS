@@ -298,6 +298,7 @@ def view_change(request):
                 successors = localNode.successors()
                 predecessors = localNode.predecessors()
                 partition_members = localNode.partition_members()
+                
                 # check if we will still have others in our partition after our deletion
                 if len(localNode.partition_members()) > 1:
                     for partition_member in partition_members:
