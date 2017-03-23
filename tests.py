@@ -9,8 +9,8 @@ import requests as req
 import time
 
 NODE_COUNTER = 2
-PRINT_HTTP_REQUESTS = False
-PRINT_HTTP_RESPONSES = False
+PRINT_HTTP_REQUESTS = True
+PRINT_HTTP_RESPONSES = True
 AVAILABILITY_THRESHOLD = 1
 TB = 5
 
@@ -190,7 +190,6 @@ def add_node_to_kvs(hostname, cur_node, new_node):
         print e
     return d
 
-
 def delete_node_from_kvs(hostname, cur_node, node_to_delete):
     d = None
     put_str = "http://" + hostname + ":" + cur_node.access_port + "/kvs/update_view?type=remove"
@@ -299,7 +298,7 @@ if __name__ == "__main__":
     hostname = 'localhost'
     network = 'mynet'
     sudo = 'sudo'
-    tests_to_run = [1, 2, 3, 4, 5, 6]
+    tests_to_run = [3]
     if 1 in tests_to_run:
         try: # Test 1
             test_description = """ Test1:
@@ -334,6 +333,7 @@ if __name__ == "__main__":
                 print "ERROR: the number of partitions should be 4, but it is " + str(number_of_partitions)
             else:
                 print "OK, the number of partitions is 4"
+
             print "Deleting nodes ..."
             resp_dict = delete_node_from_kvs(hostname, n3, nodes[0])
             number_of_partitions = resp_dict.get('number_of_partitions')
@@ -421,8 +421,11 @@ if __name__ == "__main__":
             keys = generate_random_keys(60)
             dist = add_keys(hostname, nodes, keys, 1)
             partition_id_list =  get_all_partitions_ids(nodes[0])
+            print "Partition_id_list: ", partition_id_list
+            print "Partition_id_list length: ", len(partition_id_list)
             if len(partition_id_list) != 2:
-                raise Exception("ERROR: the number of partitions should be 2")
+                print "Partition_id_list: "+str(partition_id_list)
+                raise Exception("ERROR: the number of partitions should be 2, but it is: "+str(len(partition_id_list)))
             for part_id in partition_id_list:
                 if part_id not in dist:
                     raise Exception("ERROR: No keys are added to the partiton %s" % part_id)

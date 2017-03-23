@@ -5,6 +5,8 @@ from skvs.models import KvsEntry
 import requests as req
 import sys
 import time
+import ast
+from time import sleep
 import random
 from collections import \
     Counter  # Don't listen to the linter he LIES and tells you we're not using this. Bad linter. No.
@@ -23,8 +25,8 @@ def get_partition_members(request):
     requested_id = int(request.data.get('partition_id'))
 
     if 'source' in request.data and int(request.data.get('source')) == localNode.partition_id():
-            return Response({'msg': 'error', 'error': 'partition id does not exist'},
-                            status=status.HTTP_400_BAD_REQUEST)
+        return Response({'msg': 'error', 'error': 'partition id does not exist'},
+                         status=status.HTTP_400_BAD_REQUEST)
 
     if localNode.partition_id() == requested_id:
         members = [node.address for node in localNode.partition_members()]
@@ -37,6 +39,49 @@ def get_partition_members(request):
 
     return Response(res.json(), status=res.status_code)
 
+# @api_view(['GET'])
+# def get_all_partition_ids(request):
+
+#     successor_ip = localNode.get_successor_ip()
+#     url_str = 'http://' + successor_ip + '/kvs/get_all_partition_ids'
+
+#     if 'source' not in request.data:
+#         list = []
+#         list.extend([int(localNode.partition_id())])
+#         res = req.get(url_str, data={'source': localNode.partition_id(), 'partition_id_list': repr(list)})
+
+#     if 'source' in request.data and int(request.data['source']) == localNode.partition_id():
+#         return Response({'msg': 'success', 'partition_id_list': request.data['partition_id_list']})
+
+#     if 'source' in request.data and int(request.data['source']) != localNode.partition_id():
+#         list = eval(request.data['partition_id_list'])
+#         list.extend([int(localNode.partition_id())])
+#         res = req.get(url_str, data={'source': request.data['source'], 'partition_id_list': repr(list)})
+
+#     return Response(res.json(), status=status.HTTP_200_OK)
+
+@api_view(['GET'])
+def get_all_partition_ids(request):
+
+    successor_ip = localNode.get_successor_ip()
+    url_str = 'http://' + successor_ip + '/kvs/get_all_partition_ids'
+
+    if 'source' not in request.data:
+        myList = []
+        myList.extend([int(localNode.partition_id())])
+        res = req.get(url_str, data={'source': localNode.partition_id(), 'partition_id_list': repr(myList)})
+
+    if 'source' in request.data and int(request.data['source']) == localNode.partition_id():
+        return Response({'msg': 'success', 'partition_id_list': eval(request.data['partition_id_list'])})
+
+    if 'source' in request.data and int(request.data['source']) != localNode.partition_id():
+        myList = eval(request.data['partition_id_list'])
+        myList.extend([int(localNode.partition_id())])
+        res = req.get(url_str, data={'source': request.data['source'], 'partition_id_list': repr(myList)})
+
+    # return Response({'msg': 'BULLSHITE',
+    #                  'partition_id_list': data}, status=status.HTTP_200_OK)
+    return Response(res.json(), status=status.HTTP_200_OK)
 
 @api_view(['PUT'])
 def gossip(request):
@@ -232,6 +277,7 @@ def view_change(request):
     ip_port = request.data.get('ip_port')
     if ip_port:
         change_type = request.query_params.get('type')
+
         if change_type == 'add':
             # If add, then we signal the given IP to join us
             # try:
@@ -335,29 +381,6 @@ def view_change(request):
                 return Response(res.json(), status=res.status_code)
 
     return Response({'msg': 'Error: Bad Request'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['GET'])
-def get_all_partition_ids(request):
-
-    successor_ip = localNode.get_successor_ip()
-    url_str = 'http://' + successor_ip + '/kvs/get_all_partition_ids'
-
-    if 'source' not in request.data:
-        list = []
-        list.extend([int(localNode.partition_id())])
-        res = req.get(url_str, data={'source': localNode.partition_id(), 'partition_id_list': repr(list)})
-
-    if 'source' in request.data and int(request.data['source']) == localNode.partition_id():
-        return Response({'msg': 'success', 'partition_id_list': request.data['partition_id_list']})
-
-    if 'source' in request.data and int(request.data['source']) != localNode.partition_id():
-        list = eval(request.data['partition_id_list'])
-        list.extend([int(localNode.partition_id())])
-        res = req.get(url_str, data={'source': request.data['source'], 'partition_id_list': repr(list)})
-
-    return Response(res.json(), status=status.HTTP_200_OK)
-
 
 @api_view(['PUT'])
 def payload_update(request):
