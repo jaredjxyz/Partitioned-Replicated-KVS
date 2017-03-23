@@ -11,7 +11,7 @@ import random
 from collections import \
     Counter  # Don't listen to the linter he LIES and tells you we're not using this. Bad linter. No.
 from chord_operations import localNode, Node
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError, ReadTimeout
 
 
 @api_view(['GET'])
@@ -35,30 +35,9 @@ def get_partition_members(request):
     else:
         successor_ip = localNode.get_successor_ip()
         res = req.get('http://' + successor_ip + '/kvs/get_partition_members',
-                      data={'partition_id': requested_id, 'source': int(localNode.partition_id())})
+                      data={'partition_id': requested_id, 'source': int(localNode.partition_id())}, timeout=3)
 
     return Response(res.json(), status=res.status_code)
-
-# @api_view(['GET'])
-# def get_all_partition_ids(request):
-
-#     successor_ip = localNode.get_successor_ip()
-#     url_str = 'http://' + successor_ip + '/kvs/get_all_partition_ids'
-
-#     if 'source' not in request.data:
-#         list = []
-#         list.extend([int(localNode.partition_id())])
-#         res = req.get(url_str, data={'source': localNode.partition_id(), 'partition_id_list': repr(list)})
-
-#     if 'source' in request.data and int(request.data['source']) == localNode.partition_id():
-#         return Response({'msg': 'success', 'partition_id_list': request.data['partition_id_list']})
-
-#     if 'source' in request.data and int(request.data['source']) != localNode.partition_id():
-#         list = eval(request.data['partition_id_list'])
-#         list.extend([int(localNode.partition_id())])
-#         res = req.get(url_str, data={'source': request.data['source'], 'partition_id_list': repr(list)})
-
-#     return Response(res.json(), status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 def get_all_partition_ids(request):
@@ -79,19 +58,33 @@ def get_all_partition_ids(request):
         myList.extend([int(localNode.partition_id())])
         res = req.get(url_str, data={'source': request.data['source'], 'partition_id_list': repr(myList)})
 
-    # return Response({'msg': 'BULLSHITE',
-    #                  'partition_id_list': data}, status=status.HTTP_200_OK)
     return Response(res.json(), status=status.HTTP_200_OK)
 
 @api_view(['PUT'])
 def gossip(request):
     partner_ip_port = request.data.get('ip_port')
+
+    # Put the partition member back if he's not in our successors
+    if not any(partition_member.address == partner_ip_port for partition_member in localNode.partition_members()):
+        partner_node = Node(partner_ip_port)
+        successors = localNode.successors()
+        predecessors = localNode.predecessors()
+        partition_members = localNode.partition_members()
+
+        for successor in successors:
+            successor.set_predecessor(partner_node)
+        for predecessor in predecessors:
+            predecessor.set_successors(partner_node)
+        for partition_member in partition_members:
+            partition_member.set_partition_member(partner_node)
+
     # compare all my keys to my partner's keys
+
     for entry in KvsEntry.objects.all():
         url_str = 'http://' + partner_ip_port + '/kvs/' + entry.key
 
         # get same key from partner
-        res_data = req.get(url_str).json()
+        res_data = req.get(url_str, timeout=3).json()
         partner_vc = eval(res_data['causal_payload'])
         my_vc = eval(entry.clock)
 
@@ -285,7 +278,7 @@ def view_change(request):
             localNode.join(new_node)
 
             # Get a list of partition Ids so we can return the length
-            partition_id_res = req.get('http://' + localNode.address + '/kvs/get_all_partition_ids')
+            partition_id_res = req.get('http://' + localNode.address + '/kvs/get_all_partition_ids', timeout=3)
             partition_id_list = eval(partition_id_res.json()['partition_id_list'])
             num_partition_ids = len(partition_id_list)
             return Response({'msg': 'success',
@@ -298,7 +291,7 @@ def view_change(request):
             if ip_port == localNode.address:
 
                 # Get partition Ids for response
-                partition_id_res = req.get('http://' + localNode.address + '/kvs/get_all_partition_ids')
+                partition_id_res = req.get('http://' + localNode.address + '/kvs/get_all_partition_ids', timeout=3)
                 partition_id_list = eval(partition_id_res.json()['partition_id_list'])
                 num_partition_ids = len(partition_id_list)
 
@@ -322,7 +315,7 @@ def view_change(request):
                     # if so, then delete all our entries after performing gossip
                     partner_node = successors[0]
                     req.put('http://' + partner_node.address + '/kvs/gossip', params={'request': 'gossip'},
-                            data={'ip_port': localNode.address})
+                            data={'ip_port': localNode.address}, timeout=3)
 
                     for entry in KvsEntry.objects.all():
                         entry.delete()
@@ -358,9 +351,7 @@ def view_change(request):
 
                         res = req.put(url_str, data={'val': val,
                                                      'causal_payload': kvs_entry.clock,
-                                                     'timestamp': kvs_entry.timestamp})
-
-                        print >> sys.stderr, "DFAJNGFKAOSOFGJNASOKFGJDSAFGJODSAJFGDSAOJFGSAOGJAO"
+                                                     'timestamp': kvs_entry.timestamp}, timeout=3)
 
                         if not (res.status_code == status.HTTP_200_OK or res.status_code == status.HTTP_201_CREATED):
                             return Response(res.json(), status=res.status_code)
@@ -375,10 +366,16 @@ def view_change(request):
 
             # if instead, we are not the node to be removed, forward the remove_node request to the doomed node
             else:
-                res = req.put("http://" + ip_port + '/kvs/update_view',
-                              params={'type': 'remove'},
-                              data={'ip_port': ip_port})
-                return Response(res.json(), status=res.status_code)
+                try:
+                    res = req.put("http://" + ip_port + '/kvs/update_view',
+                                  params={'type': 'remove'},
+                                  data={'ip_port': ip_port}, timeout=3)
+                except (ConnectionError, ReadTimeout):
+                    partition_id_res = req.get('http://' + localNode.address + '/kvs/get_all_partition_ids', timeout=3)
+                    partition_id_list = eval(partition_id_res.json()['partition_id_list'])
+                    num_partition_ids = len(partition_id_list)
+                    return Response({'msg': 'success',
+                                     'number_of_partitions': num_partition_ids})
 
     return Response({'msg': 'Error: Bad Request'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -453,8 +450,8 @@ def kvs_response(request, key):
                 for node in localNode.partition_members():
                     try:
                         req.put('http://' + node.address + '/broadcast_put',
-                                data={'key': key, 'value': input_value, 'timestamp': t, 'clock': repr(localNode.counter)})
-                    except ConnectionError:
+                                data={'key': key, 'value': input_value, 'timestamp': t, 'clock': repr(localNode.counter)}, timeout=3)
+                    except (ConnectionError, ReadTimeout):
                         pass
                 return Response({'replaced': 0, 'msg': 'success', 'partition_id': localNode.partition_id(), 'timestamp': t,
                                  'causal_payload': repr(localNode.counter)},
@@ -470,7 +467,7 @@ def kvs_response(request, key):
             # read repair for gets since you're polling everyone anyways
             for node in localNode.partition_members():
                 try:
-                    cheq = req.get('http://' + node.address + '/get_simple', data={'key': key})
+                    cheq = req.get('http://' + node.address + '/get_simple', data={'key': key}, timeout=3)
                     if 'clock' in cheq.json():
 
                         # if the poll returns a vector clock sooner than our own
@@ -494,7 +491,7 @@ def kvs_response(request, key):
                                                                                      'timestamp': cheq.json()['timestamp'],
                                                                                      'clock': cheq.json()['clock']})
 
-                except ConnectionError:
+                except (ConnectionError, ReadTimeout):
                     continue
 
             try:
@@ -517,14 +514,14 @@ def kvs_response(request, key):
 
         # create the proper url with successor's ip
         url_str = 'http://' + successor_ip + '/kvs/' + key
-        req.put('http://' + successor_ip + '/payload', data={'load': repr(localNode.counter)})
+        req.put('http://' + successor_ip + '/payload', data={'load': repr(localNode.counter)}, timeout=3)
 
         if method == 'GET':
             # forward request with query content
-            res = req.get(url_str)
+            res = req.get(url_str, timeout=3)
 
         elif method == 'PUT':
             # forward to main whether or not the request is empty
-            res = req.put(url_str, data=request.data)
+            res = req.put(url_str, data=request.data, timeout=3)
 
         return Response(res.json(), status=res.status_code)
